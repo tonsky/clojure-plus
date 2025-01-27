@@ -1,0 +1,16 @@
+{:deps
+ {org.clojure/clojure {:mvn/version "1.12.0"}}
+ :aliases
+ {:dev
+  {:extra-paths ["dev" "test"]
+   :extra-deps
+   {io.github.tonsky/duti {:git/sha "e36d65296a4f9758664309ec35b00887e88c405a"}}
+   :jvm-opts ["-ea"
+              "-Dclojure.main.report=stderr"
+              "-Duser.language=en"
+              "-Duser.country=US"
+              "-Dfile.encoding=UTF-8"
+              "-Djdk.attach.allowAttachSelf"
+              "-XX:+UnlockDiagnosticVMOptions"
+              "-XX:+DebugNonSafepoints"
+              "-XX:+EnableDynamicAgentLoading"]}}}
