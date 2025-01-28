@@ -44,7 +44,18 @@ Note: `:let`-declared vars are only visible inside `then` branch because they ul
   ...)
 ```
 
-Another asymmetry is `and` vs `or`: `:let` only works on top-level of `and` conditon.
+This will be quite inconvenient to solve using normal `if` and `let`, as it would require you to duplicate `<else>` clause:
+
+```
+(if (some? x)
+  (let [f (.-f x)]
+    (if (= :... f)
+      <then>
+      <else>))
+  <else>)
+```
+
+Another asymmetry is `and` vs `or`: `:let` only works insid top-level `and` condition.
 
 ### when+
 
