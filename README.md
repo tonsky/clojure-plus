@@ -36,7 +36,7 @@ Use `:let [...]` form (not nested!) inside `and` condition and its bindings will
 
 Note: `:let`-declared vars are only visible inside `then` branch because they ultimately depend on all conditions to be true. That lets you do things like:
 
-```
+```clojure
 (if+ (and
        (some? x)
        :let [f (.-f x)]
@@ -46,7 +46,7 @@ Note: `:let`-declared vars are only visible inside `then` branch because they ul
 
 This will be quite inconvenient to solve using normal `if` and `let`, as it would require you to duplicate `<else>` clause:
 
-```
+```clojure
 (if (some? x)
   (let [f (.-f x)]
     (if (= :... f)
