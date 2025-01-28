@@ -34,6 +34,18 @@ Use `:let [...]` form (not nested!) inside `and` condition and its bindings will
   6)
 ```
 
+Note: `:let`-declared vars are only visible inside `then` branch because they ultimately depend on all conditions to be true. That lets you do things like:
+
+```
+(if+ (and
+       (some? x)
+       :let [f (.-f x)]
+       (= :... f))
+  ...)
+```
+
+Another asymmetry is `and` vs `or`: `:let` only works on top-level of `and` conditon.
+
 ### when+
 
 Same as `if+`, but wraps body in implicit `do`:
