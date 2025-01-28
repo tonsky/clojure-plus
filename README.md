@@ -6,7 +6,7 @@ A collection of utilities that improve Clojure experience.
 
 Add this to deps.edn:
 
-```
+```clojure
 io.github.tonsky/clojure-plus {:mvn/version "1.0.0"}
 ```
 
@@ -18,7 +18,7 @@ Allows sharing local variables between condition and then clause.
 
 Use `:let [...]` form (not nested!) inside `and` condition and its bindings will be visible in later `and` clauses and inside `then` branch:
 
-```   
+```clojure
 (if+ (and
        (= 1 2)
        ;; same :let syntax as in doseq/for
@@ -39,7 +39,7 @@ Use `:let [...]` form (not nested!) inside `and` condition and its bindings will
 Same as `if+`, but wraps body in implicit `do`:
 
 
-```
+```clojure
 (when+ (and
          (= 1 2)
          ;; same :let syntax as in doseq/for
@@ -58,7 +58,7 @@ Cond on steroids.
    
 Define new variables between conditions:
 
-```
+```clojure
 (cond+
   false   :false
   :let    [x 1]
@@ -67,7 +67,7 @@ Define new variables between conditions:
 
 Insert imperative code:
 
-```
+```clojure
 (cond+
   (= 1 a) :false
   :do     (println a) ; will print 1 before continuing evaluating
@@ -76,7 +76,7 @@ Insert imperative code:
 
 Declare variables inside conditions, just like if+:
 
-```
+```clojure
 (cond+
   (and
     (= 1 1)
@@ -95,7 +95,7 @@ A drop-in replacement for `clojure.walk` that does not recreate data structures 
 
 Normally, `clojure.walk` will create new map from scratch and copy `:a 1, :b 2` to it:
 
-```
+```clojure
 (let [m {:a 1, :b 2}]
   (identical? m (clojure.walk/postwalk identity m)))
 
@@ -107,7 +107,7 @@ When the structure is deep and everything is recreated, it can be very taxing on
 
 Compare it to:
 
-```
+```clojure
 (let [m {:a 1, :b 2}]
   (identical? m (clojure+.walk/postwalk identity m)))
 
