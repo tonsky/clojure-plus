@@ -1,5 +1,5 @@
 (defproject io.github.tonsky/clojure-plus "0.0.0"
-  :description "<description>"
+  :description "A collection of utilities that improve Clojure experience"
   :license     {:name "MIT" :url "https://github.com/tonsky/clojure-plus/blob/master/LICENSE"}
   :url         "https://github.com/tonsky/clojure-plus"
   :dependencies
