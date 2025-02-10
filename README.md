@@ -7,7 +7,7 @@ A collection of utilities that improve Clojure experience.
 Add this to deps.edn:
 
 ```clojure
-io.github.tonsky/clojure-plus {:mvn/version "1.0.0"}
+io.github.tonsky/clojure-plus {:mvn/version "1.0.1"}
 ```
 
 ## Functions
