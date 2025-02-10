@@ -1,7 +1,7 @@
 (ns clojure+.core-test
   (:require
    [clojure+.core :as core]
-   [clojure.test :as test :refer [is are deftest testing]]))
+   [clojure.test :as test :refer [is deftest testing]]))
 
 (defmethod clojure.test/assert-expr 'thrown-with-cause-msg? [msg form]
   ;; (is (thrown-with-cause-msg? c re expr))

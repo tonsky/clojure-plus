@@ -1,7 +1,7 @@
 (ns clojure+.walk-test
   (:require
    [clojure+.walk :as walk]
-   [clojure.test :refer [is are deftest testing]]))
+   [clojure.test :refer [is are deftest]]))
 
 (defn bump [form]
   (if (number? form)
@@ -101,9 +101,10 @@
                 (reduce + (map (comp inc val) c))))
           (is (= (walk/walk inc #(reduce + %) c)
                 (reduce + (map inc c)))))
-        (when (instance? clojure.lang.Sorted c)
-          (is (= (.comparator ^clojure.lang.Sorted c)
-                (.comparator ^clojure.lang.Sorted walked))))))))
+        #?(:clj
+           (when (instance? clojure.lang.Sorted c)
+             (is (= (.comparator ^clojure.lang.Sorted c)
+                   (.comparator ^clojure.lang.Sorted walked)))))))))
 
 ; Checks that walk preserves the MapEntry type. See CLJ-2031.
 (deftest walk-mapentry

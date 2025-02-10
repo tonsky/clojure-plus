@@ -1,6 +1,6 @@
 (ns clojure+.core)
 
-(def ^:private ^:dynamic *if+-syms)
+(declare ^:private ^:dynamic *if+-syms)
   
 (defn- if+-rewrite-cond-impl [cond]
   (clojure.core/cond

@@ -25,13 +25,13 @@
   (cond
     (transient? coll) (assoc! coll key value)
     (editable? coll)  (assoc! (transient coll) key value)
-    :eles             (assoc  coll key value)))
+    :else             (assoc  coll key value)))
 
 (defn dissoc+ [coll key]
   (cond
     (transient? coll) (dissoc! coll key)
     (editable? coll)  (dissoc! (transient coll) key)
-    :eles             (dissoc  coll key)))
+    :else             (dissoc  coll key)))
 
 (defn persistent+ [coll]
   (cond
