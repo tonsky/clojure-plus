@@ -13,6 +13,8 @@
      (defmethod print-dup ~type [~value ~writer]
        (print-method ~value ~writer))))
 
+(def pr-on
+  @#'clojure.core/pr-on)
 
 ;; File
 
@@ -44,49 +46,49 @@
 
 (defprint boolean/1 [arr w]
   (.write w "#booleans ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (alter-var-root #'*data-readers* assoc 'booleans #'boolean-array)
 
 (defprint byte/1 [arr w]
   (.write w "#bytes ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (alter-var-root #'*data-readers* assoc 'bytes #'byte-array)
 
 (defprint char/1 [arr w]
   (.write w "#chars ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (alter-var-root #'*data-readers* assoc 'chars #'char-array)
 
 (defprint short/1 [arr w]
   (.write w "#shorts ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (alter-var-root #'*data-readers* assoc 'shorts #'short-array)
 
 (defprint int/1 [arr w]
   (.write w "#ints ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (alter-var-root #'*data-readers* assoc 'ints #'int-array)
 
 (defprint long/1 [arr w]
   (.write w "#longs ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (alter-var-root #'*data-readers* assoc 'longs #'long-array)
 
 (defprint float/1 [arr w]
   (.write w "#floats ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (alter-var-root #'*data-readers* assoc 'floats #'float-array)
 
 (defprint double/1 [arr w]
   (.write w "#doubles ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (alter-var-root #'*data-readers* assoc 'doubles #'double-array)
 
@@ -95,7 +97,7 @@
 
 (defprint String/1 [arr w]
   (.write w "#strings ")
-  (print-method (vec arr) w))
+  (pr-on (vec arr) w))
 
 (defn read-strings [xs]
   (into-array String xs))
@@ -109,7 +111,7 @@
   (let [cls (class arr)]
     (if (and cls (.isArray cls))
       (@#'clojure.core/print-sequential "[" print-array " " "]" arr w)
-      (print-method arr w))))
+      (pr-on arr w))))
 
 (defprint Object/1 [arr w]
   (let [cls  (class arr)
@@ -118,7 +120,7 @@
       (= Object base)
       (do
         (.write w "#objects ")
-        (print-method (vec arr) w))
+        (pr-on (vec arr) w))
       
       
       :else
@@ -126,7 +128,7 @@
         (.write w "#array ^")
         (if (= "java.lang" (.getPackageName cls))
           (.write w (subs (pr-str cls) (count "java.lang.")))
-          (print-method cls w))
+          (pr-on cls w))
         (.write w " ")
         (print-array arr w)))))
 
@@ -147,6 +149,45 @@
     arr))
 
 (alter-var-root #'*data-readers* assoc 'array #'read-array)
+
+
+;; atom
+
+(defprint clojure.lang.Atom [a w]
+  (.write w "#atom ")
+  (pr-on @a w))
+
+(alter-var-root #'*data-readers* assoc 'atom #'atom)
+
+
+;; agent
+
+(defprint clojure.lang.Agent [a w]
+  (.write w "#agent ")
+  (pr-on @a w))
+
+(alter-var-root #'*data-readers* assoc 'agent #'agent)
+
+
+;; ref
+
+(defprint clojure.lang.Ref [a w]
+  (.write w "#ref ")
+  (pr-on @a w))
+
+(alter-var-root #'*data-readers* assoc 'ref #'ref)
+
+
+;; queue
+
+(defprint clojure.lang.PersistentQueue [q w]
+  (.write w "#queue ")
+  (pr-on (vec q) w))
+
+(defn- read-queue [xs]
+  (into clojure.lang.PersistentQueue/EMPTY xs))
+
+(alter-var-root #'*data-readers* assoc 'queue #'read-queue)
 
 (comment
   (set! *data-readers* (.getRawRoot #'*data-readers*)))

@@ -4,6 +4,7 @@
    [clojure.test :as test :refer [is deftest testing use-fixtures]]
    [clojure+.print :as print])
   (:import
+   [clojure.lang Agent Atom PersistentQueue Ref]
    [java.io File]
    [java.nio.file Path]))
 
@@ -171,3 +172,41 @@
   (let [arr (read-string "#array ^String/2 [[\"a\"] [\"b\" \"c\"]]")]
     (is (= String/2 (class arr)))
     (is (= [["a"] ["b" "c"]] (mapv vec arr)))))
+
+
+;; atom
+
+(deftest atom-test
+  (is (= "#atom 123" (pr-str (atom 123))))
+  (let [atom (read-string "#atom 123")]
+    (is (instance? Atom atom))
+    (is (= 123 @atom))))
+
+
+;; agent
+
+(deftest agent-test
+  (is (= "#agent 123" (pr-str (agent 123))))
+  (let [agent (read-string "#agent 123")]
+    (is (instance? Agent agent))
+    (is (= 123 @agent))))
+
+
+;; ref
+
+(deftest ref-test
+  (is (= "#ref 123" (pr-str (ref 123))))
+  (let [ref (read-string "#ref 123")]
+    (is (instance? Ref ref))
+    (is (= 123 @ref))))
+
+
+;; queue
+
+(deftest queue-test
+  (let [q  (into PersistentQueue/EMPTY [1 2 3])
+        _  (is (= "#queue [1 2 3]" (pr-str q)))
+        q' (read-string "#queue [1 2 3]")
+        _  (is (instance? PersistentQueue q))
+        _  (is (= q q'))
+        _  (is (= [1 2 3] (vec q')))]))
