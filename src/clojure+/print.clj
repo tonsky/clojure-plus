@@ -2,8 +2,10 @@
   (:require
    [clojure.string :as str])
   (:import
+   [clojure.lang Atom Agent Delay IDeref IPending PersistentQueue Ref]
    [java.io File Writer]
-   [java.nio.file Path]))
+   [java.nio.file Path]
+   [java.util.concurrent Future]))
 
 (defmacro defprint [type [value writer] & body]
   `(do
@@ -12,6 +14,11 @@
        ~@body)
      (defmethod print-dup ~type [~value ~writer]
        (print-method ~value ~writer))))
+
+(defmacro prefer [a b]
+  `(do
+     (prefer-method print-method ~a ~b)
+     (prefer-method print-dup ~a ~b)))
 
 (def pr-on
   @#'clojure.core/pr-on)
@@ -153,7 +160,7 @@
 
 ;; atom
 
-(defprint clojure.lang.Atom [a w]
+(defprint Atom [a w]
   (.write w "#atom ")
   (pr-on @a w))
 
@@ -162,7 +169,7 @@
 
 ;; agent
 
-(defprint clojure.lang.Agent [a w]
+(defprint Agent [a w]
   (.write w "#agent ")
   (pr-on @a w))
 
@@ -171,23 +178,80 @@
 
 ;; ref
 
-(defprint clojure.lang.Ref [a w]
+(defprint Ref [a w]
   (.write w "#ref ")
   (pr-on @a w))
 
 (alter-var-root #'*data-readers* assoc 'ref #'ref)
 
 
+;; promise
+
+(defprint IPending [ref w]
+  (.write w "#promise ")
+  (if (realized? ref)
+    (pr-on @ref w)
+    (.write w ":<pending...>")))
+
+(defn- read-promise [val]
+  (if (= :<pending...> val)
+    (promise)
+    (deliver (promise) val)))
+
+(alter-var-root #'*data-readers* assoc 'promise #'read-promise)
+
+(prefer IPending IDeref)
+
+
+;; delay
+
+(defprint Delay [ref w]
+  (.write w "#delay ")
+  (if (realized? ref)
+    (pr-on @ref w)
+    (.write w ":<pending...>")))
+
+(defn- read-delay [val]
+  (if (= :<pending...> val)
+    (throw (ex-info "Can’t read back :<pending...> delay" {}))
+    (doto (delay val)
+      (deref))))
+
+(alter-var-root #'*data-readers* assoc 'delay #'read-delay)
+
+
+;; future
+
+(defprint Future [ref w]
+  (.write w "#future ")
+  (if (.isDone ref)
+    (pr-on (.get ref) w)
+    (.write w ":<pending...>")))
+
+(defn- read-future [val]
+  (if (= :<pending...> val)
+    (throw (ex-info "Can’t read back :<pending...> future" {}))
+    (doto (future val)
+      (deref))))
+
+(alter-var-root #'*data-readers* assoc 'future #'read-future)
+
+(prefer Future IPending)
+
+(prefer Future IDeref)
+
+
 ;; queue
 
-(defprint clojure.lang.PersistentQueue [q w]
+(defprint PersistentQueue [q w]
   (.write w "#queue ")
   (pr-on (vec q) w))
 
 (defn- read-queue [xs]
-  (into clojure.lang.PersistentQueue/EMPTY xs))
+  (into PersistentQueue/EMPTY xs))
 
 (alter-var-root #'*data-readers* assoc 'queue #'read-queue)
+
 
 (comment
   (set! *data-readers* (.getRawRoot #'*data-readers*)))
