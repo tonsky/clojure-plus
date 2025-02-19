@@ -38,15 +38,15 @@
     (is (= [true false true] (vec arr)))))
 
 (deftest bytes-test
-  (is (= "#bytes [1 2 3]"
-        (pr-str (byte-array [1 2 3]))))
-
-  (is (= "#bytes []"
-        (pr-str (byte-array 0))))
-
-  (let [arr (read-string "#bytes [1 2 3]")]
-    (is (= byte/1 (class arr)))
-    (is (= [1 2 3] (vec arr)))))
+  (let [_   (is (= "#bytes \"00010203649C7F80FF\"" (pr-str (byte-array [0 1 2 3 100 -100 127 -128 -1]))))
+        arr (read-string "#bytes \"00010203649C7F80FF\"")
+        _   (is (= byte/1 (class arr)))
+        _   (is (= [0 1 2 3 100 -100 127 -128 -1] (vec arr)))
+  
+        _   (is (= "#bytes \"\"" (pr-str (byte-array 0))))
+        arr (read-string "#bytes \"\"")
+        _   (is (= byte/1 (class arr)))
+        _   (is (= 0 (alength ^byte/1 arr)))]))
 
 (deftest chars-test
   (is (= "#chars [\\a \\b \\c]"

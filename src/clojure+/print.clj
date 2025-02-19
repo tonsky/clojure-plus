@@ -61,10 +61,23 @@
 (alter-var-root #'*data-readers* assoc 'booleans #'boolean-array)
 
 (defprint byte/1 [arr w]
-  (.write w "#bytes ")
-  (pr-on (vec arr) w))
+  (.write w "#bytes \"")
+  (dotimes [i (alength arr)]
+    (.write w (format "%02X" (Byte/toUnsignedInt (aget arr i)))))
+  (.write w "\""))
 
-(alter-var-root #'*data-readers* assoc 'bytes #'byte-array)
+(defn read-bytes [^String s]
+  (let [cnt (quot (count s) 2)
+        arr (byte-array cnt)]
+    (dotimes [idx cnt]
+      (let [i  (Integer/parseInt (subs s (* idx 2) (* (inc idx) 2)) 16)
+            b (if (>= i 128)
+                (byte (- i 256))
+                (byte i))]
+        (aset arr idx b)))
+    arr))
+
+(alter-var-root #'*data-readers* assoc 'bytes #'read-bytes)
 
 (defprint char/1 [arr w]
   (.write w "#chars ")
