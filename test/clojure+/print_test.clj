@@ -4,7 +4,7 @@
    [clojure.test :as test :refer [is deftest testing use-fixtures]]
    [clojure+.print :as print])
   (:import
-   [clojure.lang Atom Agent Delay ExceptionInfo IDeref IPending PersistentQueue Ref]
+   [clojure.lang Atom Agent ATransientSet Delay ExceptionInfo IDeref IPending ISeq Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
    [java.io File]
    [java.nio.file Path]
    [java.util.concurrent Future]))
@@ -177,6 +177,12 @@
     (is (instance? Ref ref))
     (is (= 123 @ref))))
 
+(deftest volatile-test
+  (is (= "#volatile 123" (pr-str (volatile! 123))))
+  (let [volatile (read-string "#volatile 123")]
+    (is (instance? Volatile volatile))
+    (is (= 123 @volatile))))
+
 (deftest promise-test
   (is (= "#promise :<pending...>" (pr-str (promise))))
   (let [promise (read-string "#promise :<pending...>")]
@@ -215,6 +221,57 @@
   (let [q  (into PersistentQueue/EMPTY [1 2 3])
         _  (is (= "#queue [1 2 3]" (pr-str q)))
         q' (read-string "#queue [1 2 3]")
-        _  (is (instance? PersistentQueue q))
+        _  (is (instance? PersistentQueue q'))
         _  (is (= q q'))
         _  (is (= [1 2 3] (vec q')))]))
+
+(deftest ns-test
+  (let [ns  (find-ns 'clojure+.print-test)
+        _   (is (= "#ns clojure+.print-test" (pr-str ns)))
+        ns' (read-string "#ns clojure+.print-test")
+        _   (is (instance? Namespace ns'))
+        _   (is (= ns ns'))]))
+
+(deftest transient-vector-test
+  (let [v  (transient [])
+        _  (is (= "#transient []" (pr-str v)))
+        v  (conj! v 1)
+        _  (is (= "#transient [1]" (pr-str v)))
+        v  (conj! v 2)
+        v  (conj! v 3)
+        _  (is (= "#transient [1 2 3]" (pr-str v)))
+        v' (read-string "#transient [1 2 3]")
+        _  (is (instance? PersistentVector$TransientVector v'))
+        _  (is (= (persistent! v) (persistent! v')))]))
+
+(deftest transient-array-map-test
+  (let [m  (transient {})
+        _  (is (= "#transient {}" (pr-str m)))
+        m  (assoc! m :a 1)
+        _  (is (= "#transient {:a 1}" (pr-str m)))
+        m  (assoc! m :b 2)
+        _  (is (= "#transient {:a 1, :b 2}" (pr-str m)))
+        m' (read-string "#transient {:a 1, :b 2}")
+        _  (is (instance? PersistentArrayMap$TransientArrayMap m'))
+        _  (is (= (persistent! m) (persistent! m')))]))
+
+(deftest transient-hash-map-test
+  (let [m  (transient (into {} (map #(vector (keyword (str %1)) %2) "abcdefghi" (range))))
+        _  (is (= "#transient {:e 4, :g 6, :c 2, :h 7, :b 1, :d 3, :f 5, :i 8, :a 0}" (pr-str m)))
+        m  (assoc! m :j 9)
+        _  (is (= "#transient {:e 4, :g 6, :c 2, :j 9, :h 7, :b 1, :d 3, :f 5, :i 8, :a 0}" (pr-str m)))
+        m' (read-string "#transient {:a 0 :b 1 :c 2 :d 3 :e 4 :f 5 :g 6 :h 7 :i 8 :j 9}")
+        _  (is (instance? PersistentHashMap$TransientHashMap m'))
+        _  (is (= (persistent! m) (persistent! m')))]))
+
+(deftest transient-hash-set-test
+  (let [s  (transient #{})
+        _  (is (= "#transient #{}" (pr-str s)))
+        s  (conj! s 1)
+        _  (is (= "#transient #{1}" (pr-str s)))
+        s  (conj! s 2)
+        s  (conj! s 3)
+        _  (is (= "#transient #{1 3 2}" (pr-str s)))
+        s' (read-string "#transient #{1 2 3}")
+        _  (is (instance? ATransientSet s'))
+        _  (is (= (persistent! s) (persistent! s')))]))

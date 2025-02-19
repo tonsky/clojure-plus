@@ -2,10 +2,13 @@
   (:require
    [clojure.string :as str])
   (:import
-   [clojure.lang Atom Agent Delay IDeref IPending PersistentQueue Ref]
+   [clojure.lang Atom Agent ATransientSet Delay IDeref IPending ISeq Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
    [java.io File Writer]
+   [java.lang.reflect Field]
    [java.nio.file Path]
-   [java.util.concurrent Future]))
+   [java.util.concurrent Future]
+   [java.util.concurrent.atomic AtomicReference]))
+
 
 (defmacro defprint [type [value writer] & body]
   `(do
@@ -185,6 +188,15 @@
 (alter-var-root #'*data-readers* assoc 'ref #'ref)
 
 
+;; Volatile
+
+(defprint Volatile [a w]
+  (.write w "#volatile ")
+  (pr-on @a w))
+
+(alter-var-root #'*data-readers* assoc 'volatile #'volatile!)
+
+
 ;; promise
 
 (defprint IPending [ref w]
@@ -202,6 +214,7 @@
 
 (prefer IPending IDeref)
 
+(prefer ISeq IPending)
 
 ;; delay
 
@@ -252,6 +265,91 @@
 
 (alter-var-root #'*data-readers* assoc 'queue #'read-queue)
 
+
+;; Namespace
+
+(defprint Namespace [n w]
+  (.write w "#ns ")
+  (.write w (str n)))
+
+(defn- read-ns [sym]
+  (the-ns sym))
+
+(alter-var-root #'*data-readers* assoc 'ns #'read-ns)
+
+
+;; Transients
+
+(defprint PersistentVector$TransientVector [v w]
+  (let [cnt (count v)]
+    (.write w "#transient [")
+    (dotimes [i cnt]
+      (pr-on (nth v i) w)
+      (when (< i (dec cnt))
+        (.write w " ")))
+    (.write w "]")))
+
+(def ^:private ^Field array-map-array-field
+  (doto (.getDeclaredField PersistentArrayMap$TransientArrayMap "array")
+    (.setAccessible true)))
+
+(defprint PersistentArrayMap$TransientArrayMap [m w]
+  (let [cnt (count m)
+        arr ^objects (.get array-map-array-field m)]
+    (.write w "#transient {")
+    (dotimes [i cnt]
+      (pr-on (aget arr (-> i (* 2))) w)
+      (.write w " ")
+      (pr-on (aget arr (-> i (* 2) (+ 1))) w)
+      (when (< i (dec cnt))
+        (.write w ", ")))
+    (.write w "}")))
+
+(def ^:private ^Field hash-map-edit-field
+  (doto (.getDeclaredField PersistentHashMap$TransientHashMap "edit")
+    (.setAccessible true)))
+
+(defprint PersistentHashMap$TransientHashMap [m w]
+  (let [edit       ^AtomicReference (.get hash-map-edit-field m)
+        edit-value (.get edit)
+        m'         (persistent! m)]
+    (.write w "#transient ")
+    (pr-on m' w)
+    (.set edit edit-value)))
+
+(def ^:private ^Field set-impl-field
+  (doto (.getDeclaredField ATransientSet "impl")
+    (.setAccessible true)))
+
+(defprint ATransientSet [s w]
+  (let [m          ^PersistentHashMap$TransientHashMap (.get set-impl-field s)
+        edit       ^AtomicReference (.get hash-map-edit-field m)
+        edit-value (.get edit)
+        m'         (persistent! m)
+        cnt        (count m')]
+    (.write w "#transient #{")
+    (doseq [[k idx] (map vector (keys m') (range))]
+      (pr-on k w)
+      (when (< idx (dec cnt))
+        (.write w " ")))
+    (.write w "}")
+    (.set edit edit-value)))
+
+(alter-var-root #'*data-readers* assoc 'transient #'transient)
+
+;; Throwable
+
+;; java.time
+
+;; java.net InetFormat URL URI etc
+
+;; java.text *Format
+
+;; java.util.concurrent.atomic ?
+
+;; ByteBuffer
+
+;; Thread, Executors?
 
 (comment
   (set! *data-readers* (.getRawRoot #'*data-readers*)))
