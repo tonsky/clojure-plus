@@ -6,9 +6,10 @@
    [java.io File Writer]
    [java.lang.reflect Field]
    [java.nio.file Path]
+   [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
+   [java.time.temporal ChronoUnit]
    [java.util.concurrent Future]
    [java.util.concurrent.atomic AtomicReference]))
-
 
 (defmacro defprint [type [value writer] & body]
   `(do
@@ -17,6 +18,18 @@
        ~@body)
      (defmethod print-dup ~type [~value ~writer]
        (print-method ~value ~writer))))
+
+(defmacro defprint-read-str [cls tag ctor]
+  `(do
+     (defprint ~cls [t# w#]
+       (.write w# ~(str "#" tag " \""))
+       (.write w# (str t#))
+       (.write w# "\""))
+
+     (defn ~(symbol (str "read-" tag)) [^String s#]
+       (~ctor s#))
+
+     (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag))))))
 
 (defmacro prefer [a b]
   `(do
@@ -354,13 +367,90 @@
 
 ;; java.time
 
+(defprint-read-str Duration       duration         Duration/parse)
+(defprint-read-str Instant        instant          Instant/parse)
+(defprint-read-str LocalDate      local-date       LocalDate/parse)
+(defprint-read-str LocalDateTime  local-date-time  LocalDateTime/parse)
+(defprint-read-str LocalTime      local-time       LocalTime/parse)
+(defprint-read-str MonthDay       month-day        MonthDay/parse)
+(defprint-read-str OffsetDateTime offset-date-time OffsetDateTime/parse)
+(defprint-read-str OffsetTime     offset-time      OffsetTime/parse)
+(defprint-read-str Period         period           Period/parse)
+(defprint-read-str Year           year             Year/parse)
+(defprint-read-str YearMonth      year-month       YearMonth/parse)
+(defprint-read-str ZonedDateTime  zoned-date-time  ZonedDateTime/parse)
+(defprint-read-str ZoneId         zone-id          ZoneId/of)
+(defprint-read-str ZoneOffset     zone-offset      ZoneOffset/of)
+
+(defprint DayOfWeek [t w]
+  (.write w "#day-of-week \"")
+  (.write w (str/capitalize (str t)))
+  (.write w "\""))
+
+(defn read-day-of-week [s]
+  (case s
+    "Sunday"    DayOfWeek/SUNDAY
+    "Monday"    DayOfWeek/MONDAY
+    "Tuesday"   DayOfWeek/TUESDAY
+    "Wednesday" DayOfWeek/WEDNESDAY
+    "Thursday"  DayOfWeek/THURSDAY
+    "Friday"    DayOfWeek/FRIDAY
+    "Saturday"  DayOfWeek/SATURDAY))
+
+(alter-var-root #'*data-readers* assoc 'day-of-week #'read-day-of-week)
+
+(defprint Month [t w]
+  (.write w "#month \"")
+  (.write w (str/capitalize (str t)))
+  (.write w "\""))
+
+(defn read-month [s]
+  (case s
+    "January"   Month/JANUARY
+    "February"  Month/FEBRUARY
+    "March"     Month/MARCH
+    "April"     Month/APRIL
+    "May"       Month/MAY
+    "June"      Month/JUNE
+    "July"      Month/JULY
+    "August"    Month/AUGUST
+    "September" Month/SEPTEMBER
+    "October"   Month/OCTOBER
+    "November"  Month/NOVEMBER
+    "December"  Month/DECEMBER))
+
+(alter-var-root #'*data-readers* assoc 'month #'read-month)
+
+(defprint ChronoUnit [t w]
+  (.write w "#chrono-unit \"")
+  (.write w (str t))
+  (.write w "\""))
+
+(defn read-chrono-unit [s]
+  (case s
+    "Nanos"     ChronoUnit/NANOS
+    "Micros"    ChronoUnit/MICROS
+    "Millis"    ChronoUnit/MILLIS
+    "Seconds"   ChronoUnit/SECONDS
+    "Minutes"   ChronoUnit/MINUTES
+    "Hours"     ChronoUnit/HOURS
+    "Half_days" ChronoUnit/HALF_DAYS
+    "Days"      ChronoUnit/DAYS
+    "Weeks"     ChronoUnit/WEEKS
+    "Months"    ChronoUnit/MONTHS
+    "Years"     ChronoUnit/YEARS
+    "Decades"   ChronoUnit/DECADES
+    "Centuries" ChronoUnit/CENTURIES
+    "Millennia" ChronoUnit/MILLENNIA
+    "Eras"      ChronoUnit/ERAS))
+
+(alter-var-root #'*data-readers* assoc 'chrono-unit #'read-chrono-unit)
+
 ;; java.net InetFormat URL URI etc
 
 ;; java.text *Format
 
 ;; java.util.concurrent.atomic ?
-
-;; ByteBuffer
 
 ;; Thread, Executors?
 
