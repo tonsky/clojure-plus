@@ -545,3 +545,18 @@
         a' (read-string "#charset \"UTF-8\"")
         _  (is (instance? Charset a'))
         _  (is (= a a'))]))
+
+(deftest thread-test
+  (let [t (Thread/currentThread)
+        _ (is (re-matches #"\#thread \[\d+ \"[^\"]+\"\]" (pr-str t)))
+
+        t (Thread. "the \"thread\"")
+        _ (is (= (str "#thread [" (.threadId t) " \"the \\\"thread\\\"\"]") (pr-str t)))
+
+        t (-> (Thread/ofVirtual)
+            (.name "abc")
+            (.start ^Runnable #(+ 1 2)))
+        _ (is (= (str "#virtual-thread [" (.threadId t) " \"abc\"]") (pr-str t)))
+
+        _ (is (thrown-with-cause-msg? Exception #"No reader function for tag thread"
+                (read-string "#thread [123 \"name\"]")))]))

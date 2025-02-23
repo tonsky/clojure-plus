@@ -550,9 +550,22 @@
 (defprint-read-str Charset charset Charset/forName .name)
 
 
+;; java.lang
 
-;; Thread, Executors?
-;; java.text *Format
+(defprint Thread [t w]
+  (if (.isVirtual t)
+    (.write w "#virtual-thread [")
+    (.write w "#thread ["))
+  (pr-on (.threadId t) w)
+  (.write w " ")
+  (pr-on (.getName t) w)
+  (let [g (.getThreadGroup t)]
+    (when (and g (not= g (.getThreadGroup (Thread/currentThread))))
+      (.write w " ")
+      (pr-on (.getName g) w)))
+  (.write w "]"))
+
+
 ;; Throwable
 
 
