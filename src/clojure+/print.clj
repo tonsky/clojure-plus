@@ -7,10 +7,11 @@
    [java.lang.ref SoftReference WeakReference]
    [java.lang.reflect Field]
    [java.net InetAddress URI URL]
+   [java.nio.charset Charset]
    [java.nio.file Path]
    [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
    [java.time.temporal ChronoUnit]
-   [java.util.concurrent Future]
+   [java.util.concurrent Future TimeUnit]
    [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
 
 (defmacro defprint [type [value writer] & body]
@@ -42,7 +43,7 @@
        (.write w# ~(str "#" tag " "))
        (pr-on (~getter v#) w#))
 
-     (defn ~(symbol (str "read-" tag)) [^String s#]
+     (defn ~(symbol (str "read-" tag)) [s#]
        (~ctor s#))
 
      (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag))))))
@@ -259,6 +260,7 @@
 
 (prefer ISeq IPending)
 
+
 ;; delay
 
 (defprint Delay [ref w]
@@ -276,7 +278,7 @@
 (alter-var-root #'*data-readers* assoc 'delay #'read-delay)
 
 
-;; future
+;; java.util.concurrent
 
 (defprint Future [ref w]
   (.write w "#future ")
@@ -295,6 +297,24 @@
 (prefer Future IPending)
 
 (prefer Future IDeref)
+
+
+(defprint TimeUnit [t w]
+  (.write w "#time-unit \"")
+  (.write w (str/capitalize (str t)))
+  (.write w "\""))
+
+(defn read-time-unit [^String s]
+  (case s
+    "Days"         TimeUnit/DAYS
+    "Hours"        TimeUnit/HOURS
+    "Microseconds" TimeUnit/MICROSECONDS
+    "Milliseconds" TimeUnit/MILLISECONDS
+    "Minutes"      TimeUnit/MINUTES
+    "Nanoseconds"  TimeUnit/NANOSECONDS
+    "Seconds"      TimeUnit/SECONDS))
+
+(alter-var-root #'*data-readers* assoc 'time-unit #'read-time-unit)
 
 
 ;; queue
@@ -380,7 +400,6 @@
 
 (alter-var-root #'*data-readers* assoc 'transient #'transient)
 
-;; Throwable
 
 ;; java.time
 
@@ -463,11 +482,13 @@
 
 (alter-var-root #'*data-readers* assoc 'chrono-unit #'read-chrono-unit)
 
+
 ;; java.net
 
 (defprint-read-str InetAddress inet-address InetAddress/ofLiteral .getHostAddress)
 (defprint-read-str URI         uri          URI.)
 (defprint-read-str URL         url          URL.)
+
 
 ;; java.util.concurrent.atomic
 
@@ -524,10 +545,16 @@
 (defprint-read-value WeakReference weak-ref WeakReference. .get)
 
 
+;; java.nio.charset
+
+(defprint-read-str Charset charset Charset/forName .name)
+
+
+
 ;; Thread, Executors?
-;; TimeUnit
-;; Charset?
 ;; java.text *Format
+;; Throwable
+
 
 (when (thread-bound? #'*data-readers*)
   (set! *data-readers* (.getRawRoot #'*data-readers*)))

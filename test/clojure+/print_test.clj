@@ -8,10 +8,11 @@
    [java.io File]
    [java.lang.ref SoftReference WeakReference]
    [java.net InetAddress URI URL]
+   [java.nio.charset Charset]
    [java.nio.file Path]
    [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
    [java.time.temporal ChronoUnit]
-   [java.util.concurrent Future]
+   [java.util.concurrent Future TimeUnit]
    [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
 
 (use-fixtures :once
@@ -221,6 +222,14 @@
     (is (instance? Future future))
     (is (realized? future))
     (is (= 123 @future))))
+
+(deftest time-unit-test
+  (let [t  TimeUnit/SECONDS
+        _  (is (= "#time-unit \"Seconds\"" (pr-str t)))
+        t' (read-string "#time-unit \"Seconds\"")
+        _  (is (instance? TimeUnit t'))
+        _  (is (= t t'))]))
+
 
 (deftest queue-test
   (let [q  (into PersistentQueue/EMPTY [1 2 3])
@@ -529,3 +538,10 @@
         a' (read-string "#weak-ref #atom 123")
         _  (is (instance? WeakReference a'))
         _  (is (= 123 @(WeakReference/.get a')))]))
+
+(deftest charset-test
+  (let [a  (Charset/forName "UTF-8")
+        _  (is (= "#charset \"UTF-8\"" (pr-str a)))
+        a' (read-string "#charset \"UTF-8\"")
+        _  (is (instance? Charset a'))
+        _  (is (= a a'))]))
