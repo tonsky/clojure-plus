@@ -4,6 +4,7 @@
   (:import
    [clojure.lang Atom Agent ATransientSet Delay IDeref IPending ISeq Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
    [java.io File Writer]
+   [java.lang.ref SoftReference WeakReference]
    [java.lang.reflect Field]
    [java.net InetAddress URI URL]
    [java.nio.file Path]
@@ -516,8 +517,14 @@
 
 (alter-var-root #'*data-readers* assoc 'atomic-refs #'read-atomic-refs)
 
-;; Thread, Executors?
+
 ;; java.lang.ref
+
+(defprint-read-value SoftReference soft-ref SoftReference. .get)
+(defprint-read-value WeakReference weak-ref WeakReference. .get)
+
+
+;; Thread, Executors?
 ;; TimeUnit
 ;; Charset?
 ;; java.text *Format

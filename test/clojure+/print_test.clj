@@ -6,6 +6,7 @@
   (:import
    [clojure.lang Atom Agent ATransientSet Delay ExceptionInfo IDeref IPending ISeq Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
    [java.io File]
+   [java.lang.ref SoftReference WeakReference]
    [java.net InetAddress URI URL]
    [java.nio.file Path]
    [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
@@ -454,7 +455,7 @@
         _  (is (instance? AtomicLong a'))
         _  (is (= 123 (AtomicLong/.get a')))]))
 
-(deftest atomic-reference-test
+(deftest atomic-ref-test
   (let [o  (atom 123)
         a  (AtomicReference. o)
         _  (is (= "#atomic-ref #atom 123" (pr-str a)))
@@ -512,3 +513,19 @@
         _  (is (= 1 @(AtomicReferenceArray/.get a' 0)))
         _  (is (= 2 @(AtomicReferenceArray/.get a' 1)))
         _  (is (= 3 @(AtomicReferenceArray/.get a' 2)))]))
+
+(deftest soft-ref-test
+  (let [o  (atom 123)
+        a  (SoftReference. o)
+        _  (is (= "#soft-ref #atom 123" (pr-str a)))
+        a' (read-string "#soft-ref #atom 123")
+        _  (is (instance? SoftReference a'))
+        _  (is (= 123 @(SoftReference/.get a')))]))
+
+(deftest weak-ref-test
+  (let [o  (atom 123)
+        a  (WeakReference. o)
+        _  (is (= "#weak-ref #atom 123" (pr-str a)))
+        a' (read-string "#weak-ref #atom 123")
+        _  (is (instance? WeakReference a'))
+        _  (is (= 123 @(WeakReference/.get a')))]))
