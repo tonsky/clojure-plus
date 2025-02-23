@@ -5,11 +5,12 @@
    [clojure.lang Atom Agent ATransientSet Delay IDeref IPending ISeq Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
    [java.io File Writer]
    [java.lang.reflect Field]
+   [java.net InetAddress URI URL]
    [java.nio.file Path]
    [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
    [java.time.temporal ChronoUnit]
    [java.util.concurrent Future]
-   [java.util.concurrent.atomic AtomicReference]))
+   [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
 
 (defmacro defprint [type [value writer] & body]
   `(do
@@ -19,17 +20,32 @@
      (defmethod print-dup ~type [~value ~writer]
        (print-method ~value ~writer))))
 
-(defmacro defprint-read-str [cls tag ctor]
+(defmacro defprint-read-str
+  ([cls tag ctor]
+   `(defprint-read-str ~cls ~tag ~ctor str))
+  ([cls tag ctor getter]
   `(do
      (defprint ~cls [t# w#]
        (.write w# ~(str "#" tag " \""))
-       (.write w# (str t#))
+       (.write w# (str/replace (~getter t#) "\"" "\\\""))
        (.write w# "\""))
 
      (defn ~(symbol (str "read-" tag)) [^String s#]
        (~ctor s#))
 
+     (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag)))))))
+
+(defmacro defprint-read-value [cls tag ctor getter]
+  `(do
+     (defprint ~cls [v# w#]
+       (.write w# ~(str "#" tag " "))
+       (pr-on (~getter v#) w#))
+
+     (defn ~(symbol (str "read-" tag)) [^String s#]
+       (~ctor s#))
+
      (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag))))))
+
 
 (defmacro prefer [a b]
   `(do
@@ -446,13 +462,65 @@
 
 (alter-var-root #'*data-readers* assoc 'chrono-unit #'read-chrono-unit)
 
-;; java.net InetFormat URL URI etc
+;; java.net
 
-;; java.text *Format
+(defprint-read-str InetAddress inet-address InetAddress/ofLiteral .getHostAddress)
+(defprint-read-str URI         uri          URI.)
+(defprint-read-str URL         url          URL.)
 
-;; java.util.concurrent.atomic ?
+;; java.util.concurrent.atomic
+
+(defprint-read-value AtomicBoolean   atomic-boolean AtomicBoolean.   .get)
+(defprint-read-value AtomicInteger   atomic-int     AtomicInteger.   .get)
+(defprint-read-value AtomicLong      atomic-long    AtomicLong.      .get)
+(defprint-read-value AtomicReference atomic-ref     AtomicReference. .get)
+
+(defprint AtomicIntegerArray [a w]
+  (.write w "#atomic-ints [")
+  (dotimes [i (.length a)]
+    (.write w (str (.get a i)))
+    (when (< i (dec (.length a)))
+      (.write w " ")))
+  (.write w "]"))
+
+(defn read-atomic-ints [xs]
+  (AtomicIntegerArray. (int-array xs)))
+
+(alter-var-root #'*data-readers* assoc 'atomic-ints #'read-atomic-ints)
+
+
+(defprint AtomicLongArray [a w]
+  (.write w "#atomic-longs [")
+  (dotimes [i (.length a)]
+    (.write w (str (.get a i)))
+    (when (< i (dec (.length a)))
+      (.write w " ")))
+  (.write w "]"))
+
+(defn read-atomic-longs [xs]
+  (AtomicLongArray. (long-array xs)))
+
+(alter-var-root #'*data-readers* assoc 'atomic-longs #'read-atomic-longs)
+
+
+(defprint AtomicReferenceArray [a w]
+  (.write w "#atomic-refs [")
+  (dotimes [i (.length a)]
+    (pr-on (.get a i) w)
+    (when (< i (dec (.length a)))
+      (.write w " ")))
+  (.write w "]"))
+
+(defn read-atomic-refs [xs]
+  (AtomicReferenceArray. ^objects (into-array Object xs)))
+
+(alter-var-root #'*data-readers* assoc 'atomic-refs #'read-atomic-refs)
 
 ;; Thread, Executors?
+;; java.lang.ref
+;; TimeUnit
+;; Charset?
+;; java.text *Format
 
-(comment
+(when (thread-bound? #'*data-readers*)
   (set! *data-readers* (.getRawRoot #'*data-readers*)))

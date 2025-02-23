@@ -6,10 +6,12 @@
   (:import
    [clojure.lang Atom Agent ATransientSet Delay ExceptionInfo IDeref IPending ISeq Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
    [java.io File]
+   [java.net InetAddress URI URL]
    [java.nio.file Path]
    [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
    [java.time.temporal ChronoUnit]
-   [java.util.concurrent Future]))
+   [java.util.concurrent Future]
+   [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
 
 (use-fixtures :once
   (fn [f]
@@ -403,3 +405,110 @@
         t' (read-string "#chrono-unit \"Seconds\"")
         _  (is (instance? ChronoUnit t'))
         _  (is (= t t'))]))
+
+(deftest inet-address-test
+  (let [a  (InetAddress/ofLiteral "127.0.0.1")
+        _  (is (= "#inet-address \"127.0.0.1\"" (pr-str a)))
+        a' (read-string "#inet-address \"127.0.0.1\"")
+        _  (is (instance? InetAddress a'))
+        _  (is (= a a'))
+
+        b  (InetAddress/ofLiteral "0:0:0:0:0:0:0:1")
+        _  (is (= "#inet-address \"0:0:0:0:0:0:0:1\"" (pr-str b)))
+        b' (read-string "#inet-address \"0:0:0:0:0:0:0:1\"")
+        _  (is (instance? InetAddress b'))
+        _  (is (= b b'))]))
+
+(deftest url-test
+  (let [a  (URL. "https://www.example.com:1080/docs/resource1.html?q=\"escape\"")
+        _  (is (= "#url \"https://www.example.com:1080/docs/resource1.html?q=\\\"escape\\\"\"" (pr-str a)))
+        a' (read-string "#url \"https://www.example.com:1080/docs/resource1.html?q=\\\"escape\\\"\"")
+        _  (is (instance? URL a'))
+        _  (is (= a a'))]))
+
+(deftest uri-test
+  (let [a  (URI. "https://www.example.com:1080/docs/resource1.html")
+        _  (is (= "#uri \"https://www.example.com:1080/docs/resource1.html\"" (pr-str a)))
+        a' (read-string "#uri \"https://www.example.com:1080/docs/resource1.html\"")
+        _  (is (instance? URI a'))
+        _  (is (= a a'))]))
+
+(deftest atomic-boolean-test
+  (is (= "#atomic-boolean true" (pr-str (AtomicBoolean. true))))
+  (is (= "#atomic-boolean false" (pr-str (AtomicBoolean. false))))
+  (let [a' (read-string "#atomic-boolean false")]
+    (is (instance? AtomicBoolean a'))
+    (is (= false (AtomicBoolean/.get a')))))
+
+(deftest atomic-int-test
+  (let [a  (AtomicInteger. 123)
+        _  (is (= "#atomic-int 123" (pr-str a)))
+        a' (read-string "#atomic-int 123")
+        _  (is (instance? AtomicInteger a'))
+        _  (is (= 123 (AtomicInteger/.get a')))]))
+
+(deftest atomic-long-test
+  (let [a  (AtomicLong. 123)
+        _  (is (= "#atomic-long 123" (pr-str a)))
+        a' (read-string "#atomic-long 123")
+        _  (is (instance? AtomicLong a'))
+        _  (is (= 123 (AtomicLong/.get a')))]))
+
+(deftest atomic-reference-test
+  (let [o  (atom 123)
+        a  (AtomicReference. o)
+        _  (is (= "#atomic-ref #atom 123" (pr-str a)))
+        a' (read-string "#atomic-ref #atom 123")
+        _  (is (instance? AtomicReference a'))
+        _  (is (= 123 @(AtomicReference/.get a')))]))
+
+(deftest atomic-ints-test
+  (let [a  (AtomicIntegerArray. (int-array []))
+        _  (is (= "#atomic-ints []" (pr-str a)))
+        a' (read-string "#atomic-ints []")
+        _  (is (instance? AtomicIntegerArray a'))
+        _  (is (= 0 (AtomicIntegerArray/.length a')))
+
+        a  (AtomicIntegerArray. (int-array [1 2 3]))
+        _  (is (= "#atomic-ints [1 2 3]" (pr-str a)))
+        a' (read-string "#atomic-ints [1 2 3]")
+        _  (is (instance? AtomicIntegerArray a'))
+        _  (is (= 3 (AtomicIntegerArray/.length a')))
+        _  (is (= 1 (AtomicIntegerArray/.get a' 0)))
+        _  (is (= 2 (AtomicIntegerArray/.get a' 1)))
+        _  (is (= 3 (AtomicIntegerArray/.get a' 2)))]))
+
+(deftest atomic-longs-test
+  (let [a  (AtomicLongArray. (long-array []))
+        _  (is (= "#atomic-longs []" (pr-str a)))
+        a' (read-string "#atomic-longs []")
+        _  (is (instance? AtomicLongArray a'))
+        _  (is (= 0 (AtomicLongArray/.length a')))
+
+        a  (AtomicLongArray. (long-array [1 2 3]))
+        _  (is (= "#atomic-longs [1 2 3]" (pr-str a)))
+        a' (read-string "#atomic-longs [1 2 3]")
+        _  (is (instance? AtomicLongArray a'))
+        _  (is (= 3 (AtomicLongArray/.length a')))
+        _  (is (= 1 (AtomicLongArray/.get a' 0)))
+        _  (is (= 2 (AtomicLongArray/.get a' 1)))
+        _  (is (= 3 (AtomicLongArray/.get a' 2)))]))
+
+(deftest atomic-refs-test
+  (let [a  (AtomicReferenceArray. ^objects (into-array Object []))
+        _  (is (= "#atomic-refs []" (pr-str a)))
+        a' (read-string "#atomic-refs []")
+        _  (is (instance? AtomicReferenceArray a'))
+        _  (is (= 0 (AtomicReferenceArray/.length a')))
+
+        o1 (atom 1)
+        o2 (atom 2)
+        o3 (atom 3)
+        a  (AtomicReferenceArray. ^objects (into-array Object [o1 o2 o3]))
+        _  (is (= "#atomic-refs [#atom 1 #atom 2 #atom 3]" (pr-str a)))
+        a' (read-string "#atomic-refs [#atom 1 #atom 2 #atom 3]")
+        _  (is (instance? AtomicReferenceArray a'))
+        _  (is (= 3 (AtomicReferenceArray/.length a')))
+        _  (is (= 1 @(AtomicReferenceArray/.get a' 0)))
+        _  (is (= 2 @(AtomicReferenceArray/.get a' 1)))
+        _  (is (= 3 @(AtomicReferenceArray/.get a' 2)))]))
