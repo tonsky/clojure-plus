@@ -225,11 +225,10 @@
 
 (deftest time-unit-test
   (let [t  TimeUnit/SECONDS
-        _  (is (= "#time-unit \"Seconds\"" (pr-str t)))
-        t' (read-string "#time-unit \"Seconds\"")
+        _  (is (= "#time-unit :seconds" (pr-str t)))
+        t' (read-string "#time-unit :seconds")
         _  (is (instance? TimeUnit t'))
         _  (is (= t t'))]))
-
 
 (deftest queue-test
   (let [q  (into PersistentQueue/EMPTY [1 2 3])
@@ -397,22 +396,22 @@
 
 (deftest day-of-week-test
   (let [t  DayOfWeek/WEDNESDAY
-        _  (is (= "#day-of-week \"Wednesday\"" (pr-str t)))
-        t' (read-string "#day-of-week \"Wednesday\"")
+        _  (is (= "#day-of-week :wednesday" (pr-str t)))
+        t' (read-string "#day-of-week :wednesday")
         _  (is (instance? DayOfWeek t'))
         _  (is (= t t'))]))
 
 (deftest month-test
   (let [t  Month/FEBRUARY
-        _  (is (= "#month \"February\"" (pr-str t)))
-        t' (read-string "#month \"February\"")
+        _  (is (= "#month :february" (pr-str t)))
+        t' (read-string "#month :february")
         _  (is (instance? Month t'))
         _  (is (= t t'))]))
 
 (deftest chrono-unit-test
   (let [t  ChronoUnit/SECONDS
-        _  (is (= "#chrono-unit \"Seconds\"" (pr-str t)))
-        t' (read-string "#chrono-unit \"Seconds\"")
+        _  (is (= "#chrono-unit :seconds" (pr-str t)))
+        t' (read-string "#chrono-unit :seconds")
         _  (is (instance? ChronoUnit t'))
         _  (is (= t t'))]))
 

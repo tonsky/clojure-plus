@@ -48,6 +48,21 @@
 
      (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag))))))
 
+(defmacro defprint-read-enum [cls tag values]
+  `(do
+     (defprint ~cls [v# w#]
+       (.write w# ~(str "#" tag " :"))
+       (.write w# (str/lower-case (str v#))))
+
+     (defn ~(symbol (str "read-" tag)) [kw#]
+       (case kw#
+         ~@(for [sym values
+                 kv  [(-> sym str str/lower-case keyword)
+                      (symbol (str cls) (str sym))]]
+             kv)))
+
+     (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag))))))
+
 
 (defmacro prefer [a b]
   `(do
@@ -299,22 +314,8 @@
 (prefer Future IDeref)
 
 
-(defprint TimeUnit [t w]
-  (.write w "#time-unit \"")
-  (.write w (str/capitalize (str t)))
-  (.write w "\""))
-
-(defn read-time-unit [^String s]
-  (case s
-    "Days"         TimeUnit/DAYS
-    "Hours"        TimeUnit/HOURS
-    "Microseconds" TimeUnit/MICROSECONDS
-    "Milliseconds" TimeUnit/MILLISECONDS
-    "Minutes"      TimeUnit/MINUTES
-    "Nanoseconds"  TimeUnit/NANOSECONDS
-    "Seconds"      TimeUnit/SECONDS))
-
-(alter-var-root #'*data-readers* assoc 'time-unit #'read-time-unit)
+(defprint-read-enum TimeUnit time-unit
+  [DAYS HOURS MICROSECONDS MILLISECONDS MINUTES NANOSECONDS SECONDS])
 
 
 ;; queue
@@ -418,69 +419,14 @@
 (defprint-read-str ZoneId         zone-id          ZoneId/of)
 (defprint-read-str ZoneOffset     zone-offset      ZoneOffset/of)
 
-(defprint DayOfWeek [t w]
-  (.write w "#day-of-week \"")
-  (.write w (str/capitalize (str t)))
-  (.write w "\""))
+(defprint-read-enum DayOfWeek day-of-week
+  [MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY])
 
-(defn read-day-of-week [s]
-  (case s
-    "Sunday"    DayOfWeek/SUNDAY
-    "Monday"    DayOfWeek/MONDAY
-    "Tuesday"   DayOfWeek/TUESDAY
-    "Wednesday" DayOfWeek/WEDNESDAY
-    "Thursday"  DayOfWeek/THURSDAY
-    "Friday"    DayOfWeek/FRIDAY
-    "Saturday"  DayOfWeek/SATURDAY))
+(defprint-read-enum Month month
+  [JANUARY FEBRUARY MARCH APRIL MAY JUNE JULY AUGUST SEPTEMBER OCTOBER NOVEMBER DECEMBER])
 
-(alter-var-root #'*data-readers* assoc 'day-of-week #'read-day-of-week)
-
-(defprint Month [t w]
-  (.write w "#month \"")
-  (.write w (str/capitalize (str t)))
-  (.write w "\""))
-
-(defn read-month [s]
-  (case s
-    "January"   Month/JANUARY
-    "February"  Month/FEBRUARY
-    "March"     Month/MARCH
-    "April"     Month/APRIL
-    "May"       Month/MAY
-    "June"      Month/JUNE
-    "July"      Month/JULY
-    "August"    Month/AUGUST
-    "September" Month/SEPTEMBER
-    "October"   Month/OCTOBER
-    "November"  Month/NOVEMBER
-    "December"  Month/DECEMBER))
-
-(alter-var-root #'*data-readers* assoc 'month #'read-month)
-
-(defprint ChronoUnit [t w]
-  (.write w "#chrono-unit \"")
-  (.write w (str t))
-  (.write w "\""))
-
-(defn read-chrono-unit [s]
-  (case s
-    "Nanos"     ChronoUnit/NANOS
-    "Micros"    ChronoUnit/MICROS
-    "Millis"    ChronoUnit/MILLIS
-    "Seconds"   ChronoUnit/SECONDS
-    "Minutes"   ChronoUnit/MINUTES
-    "Hours"     ChronoUnit/HOURS
-    "Half_days" ChronoUnit/HALF_DAYS
-    "Days"      ChronoUnit/DAYS
-    "Weeks"     ChronoUnit/WEEKS
-    "Months"    ChronoUnit/MONTHS
-    "Years"     ChronoUnit/YEARS
-    "Decades"   ChronoUnit/DECADES
-    "Centuries" ChronoUnit/CENTURIES
-    "Millennia" ChronoUnit/MILLENNIA
-    "Eras"      ChronoUnit/ERAS))
-
-(alter-var-root #'*data-readers* assoc 'chrono-unit #'read-chrono-unit)
+(defprint-read-enum ChronoUnit chrono-unit
+  [NANOS MICROS MILLIS SECONDS MINUTES HOURS HALF_DAYS DAYS WEEKS MONTHS YEARS DECADES CENTURIES MILLENNIA ERAS])
 
 
 ;; java.net
@@ -564,9 +510,6 @@
       (.write w " ")
       (pr-on (.getName g) w)))
   (.write w "]"))
-
-
-;; Throwable
 
 
 (when (thread-bound? #'*data-readers*)
