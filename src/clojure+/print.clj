@@ -112,15 +112,18 @@
     (.write w (format "%02X" (Byte/toUnsignedInt (aget arr i)))))
   (.write w "\""))
 
+(defn- int->byte [i]
+  (if (>= i 128)
+    (byte (- i 256))
+    (byte i)))
+
 (defn read-bytes [^String s]
   (let [cnt (quot (count s) 2)
         arr (byte-array cnt)]
     (dotimes [idx cnt]
-      (let [i  (Integer/parseInt (subs s (* idx 2) (* (inc idx) 2)) 16)
-            b (if (>= i 128)
-                (byte (- i 256))
-                (byte i))]
-        (aset arr idx b)))
+      (let [i (Integer/parseInt (subs s (* idx 2) (* (inc idx) 2)) 16)
+            b (int->byte i)]
+        (aset arr idx (byte b))))
     arr))
 
 (alter-var-root #'*data-readers* assoc 'bytes #'read-bytes)
@@ -431,7 +434,7 @@
 
 ;; java.net
 
-(defprint-read-str InetAddress inet-address InetAddress/ofLiteral .getHostAddress)
+(defprint-read-str InetAddress inet-address InetAddress/getByName .getHostAddress)
 (defprint-read-str URI         uri          URI.)
 (defprint-read-str URL         url          URL.)
 

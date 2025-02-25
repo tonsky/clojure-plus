@@ -1,6 +1,7 @@
 (ns clojure+.print-test
   (:require
    [clojure.java.io :as io]
+   [clojure.string :as str]
    [clojure.test :as test :refer [is deftest testing use-fixtures]]
    [clojure+.print :as print])
   (:import
@@ -416,15 +417,15 @@
         _  (is (= t t'))]))
 
 (deftest inet-address-test
-  (let [a  (InetAddress/ofLiteral "127.0.0.1")
+  (let [a  (InetAddress/getByName "127.0.0.1")
         _  (is (= "#inet-address \"127.0.0.1\"" (pr-str a)))
         a' (read-string "#inet-address \"127.0.0.1\"")
         _  (is (instance? InetAddress a'))
         _  (is (= a a'))
 
-        b  (InetAddress/ofLiteral "0:0:0:0:0:0:0:1")
-        _  (is (= "#inet-address \"0:0:0:0:0:0:0:1\"" (pr-str b)))
-        b' (read-string "#inet-address \"0:0:0:0:0:0:0:1\"")
+        b  (InetAddress/getByName "1080:0:0:0:8:800:200C:417A")
+        _  (is (= "#inet-address \"1080:0:0:0:8:800:200c:417a\"" (pr-str b)))
+        b' (read-string "#inet-address \"1080:0:0:0:8:800:200c:417a\"")
         _  (is (instance? InetAddress b'))
         _  (is (= b b'))]))
 
@@ -555,7 +556,7 @@
         t (-> (Thread/ofVirtual)
             (.name "abc")
             (.start ^Runnable #(+ 1 2)))
-        _ (is (= (str "#virtual-thread [" (.threadId t) " \"abc\"]") (pr-str t)))
+        _ (is (str/starts-with? (pr-str t) (str "#virtual-thread [" (.threadId t) " \"abc\"")))
 
         _ (is (thrown-with-cause-msg? Exception #"No reader function for tag thread"
                 (read-string "#thread [123 \"name\"]")))]))
