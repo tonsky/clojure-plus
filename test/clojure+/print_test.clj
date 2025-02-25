@@ -18,20 +18,9 @@
 
 (use-fixtures :once
   (fn [f]
-    (set! *data-readers* (.getRawRoot #'*data-readers*))
+    (print/install!)
     (f)))
 
-(deftest file-test
-  (is (= "#file \"/abc/x\\\"y\"" (pr-str (io/file "/abc/x\"y"))))
-  (let [file (read-string "#file \"x\\\"y\"")]
-    (is (instance? File file))
-    (is (= "x\"y" (File/.getPath file)))))
-
-(deftest path-test
-  (is (= "#path \"/abc/x\\\"y\"" (pr-str (.toPath (io/file "/abc/x\"y")))))
-  (let [path (read-string "#path \"x\\\"y\"")]
-    (is (instance? Path path))
-    (is (= "x\"y" (str path)))))
 
 (deftest booleans-test
   (is (= "#booleans [true false true]"
@@ -191,8 +180,8 @@
     (is (= 123 @volatile))))
 
 (deftest promise-test
-  (is (= "#promise :<pending...>" (pr-str (promise))))
-  (let [promise (read-string "#promise :<pending...>")]
+  (is (= "#promise <pending...>" (pr-str (promise))))
+  (let [promise (read-string "#promise <pending...>")]
     (is (instance? IPending promise))
     (is (not (realized? promise))))
 
@@ -203,9 +192,9 @@
     (is (= 123 @promise))))
 
 (deftest delay-test
-  (is (= "#delay :<pending...>" (pr-str (delay))))
-  (is (thrown-with-cause-msg? ExceptionInfo #"Can’t read back :<pending\.\.\.> delay"
-        (read-string "#delay :<pending...>")))
+  (is (= "#delay <pending...>" (pr-str (delay))))
+  (is (thrown-with-cause-msg? ExceptionInfo #"Can’t read back <pending\.\.\.> delay"
+        (read-string "#delay <pending...>")))
 
   (is (= "#delay 123" (pr-str (doto (delay 123) (deref)))))
   (let [delay (read-string "#delay 123")]
@@ -214,30 +203,15 @@
     (is (= 123 @delay))))
 
 (deftest future-test
-  (is (= "#future :<pending...>" (pr-str (future (Thread/sleep 100) 123))))
-  (is (thrown-with-cause-msg? ExceptionInfo #"Can’t read back :<pending\.\.\.> future"
-        (read-string "#future :<pending...>")))
+  (is (= "#future <pending...>" (pr-str (future (Thread/sleep 100) 123))))
+  (is (thrown-with-cause-msg? ExceptionInfo #"Can’t read back <pending\.\.\.> future"
+        (read-string "#future <pending...>")))
 
   (is (= "#future 123" (pr-str (doto (future 123) (deref)))))
   (let [future (read-string "#future 123")]
     (is (instance? Future future))
     (is (realized? future))
     (is (= 123 @future))))
-
-(deftest time-unit-test
-  (let [t  TimeUnit/SECONDS
-        _  (is (= "#time-unit :seconds" (pr-str t)))
-        t' (read-string "#time-unit :seconds")
-        _  (is (instance? TimeUnit t'))
-        _  (is (= t t'))]))
-
-(deftest queue-test
-  (let [q  (into PersistentQueue/EMPTY [1 2 3])
-        _  (is (= "#queue [1 2 3]" (pr-str q)))
-        q' (read-string "#queue [1 2 3]")
-        _  (is (instance? PersistentQueue q'))
-        _  (is (= q q'))
-        _  (is (= [1 2 3] (vec q')))]))
 
 (deftest ns-test
   (let [ns  (find-ns 'clojure+.print-test)
@@ -290,12 +264,90 @@
         _  (is (instance? ATransientSet s'))
         _  (is (= (persistent! s) (persistent! s')))]))
 
-(deftest duration-test
-  (let [t  (-> (Duration/ofHours 12) (.plusMinutes 30) (.plusSeconds 59))
-        _  (is (= "#duration \"PT12H30M59S\"" (pr-str t)))
-        t' (read-string "#duration \"PT12H30M59S\"")
-        _  (is (instance? Duration t'))
-        _  (is (= t t'))]))
+(deftest queue-test
+  (let [q  (into PersistentQueue/EMPTY [1 2 3])
+        _  (is (= "#queue [1 2 3]" (pr-str q)))
+        q' (read-string "#queue [1 2 3]")
+        _  (is (instance? PersistentQueue q'))
+        _  (is (= q q'))
+        _  (is (= [1 2 3] (vec q')))]))
+
+(deftest file-test
+  (is (= "#file \"/abc/x\\\"y\"" (pr-str (io/file "/abc/x\"y"))))
+  (let [file (read-string "#file \"x\\\"y\"")]
+    (is (instance? File file))
+    (is (= "x\"y" (File/.getPath file)))))
+
+(deftest thread-test
+  (let [t (Thread/currentThread)
+        _ (is (re-matches #"\#thread \[\d+ \"[^\"]+\"\]" (pr-str t)))
+
+        t (Thread. "the \"thread\"")
+        _ (is (= (str "#thread [" (.threadId t) " \"the \\\"thread\\\"\"]") (pr-str t)))
+
+        t (-> (Thread/ofVirtual)
+            (.name "abc")
+            (.start ^Runnable #(+ 1 2)))
+        _ (is (str/starts-with? (pr-str t) (str "^:virtual #thread [" (.threadId t) " \"abc\"")))
+
+        _ (is (thrown-with-cause-msg? Exception #"No reader function for tag thread"
+                (read-string "#thread [123 \"name\"]")))]))
+
+(deftest soft-ref-test
+  (let [o  (atom 123)
+        a  (SoftReference. o)
+        _  (is (= "#soft-ref #atom 123" (pr-str a)))
+        a' (read-string "#soft-ref #atom 123")
+        _  (is (instance? SoftReference a'))
+        _  (is (= 123 @(SoftReference/.get a')))]))
+
+(deftest weak-ref-test
+  (let [o  (atom 123)
+        a  (WeakReference. o)
+        _  (is (= "#weak-ref #atom 123" (pr-str a)))
+        a' (read-string "#weak-ref #atom 123")
+        _  (is (instance? WeakReference a'))
+        _  (is (= 123 @(WeakReference/.get a')))]))
+
+(deftest inet-address-test
+  (let [a  (InetAddress/getByName "127.0.0.1")
+        _  (is (= "#inet-address \"127.0.0.1\"" (pr-str a)))
+        a' (read-string "#inet-address \"127.0.0.1\"")
+        _  (is (instance? InetAddress a'))
+        _  (is (= a a'))
+
+        b  (InetAddress/getByName "1080:0:0:0:8:800:200C:417A")
+        _  (is (= "#inet-address \"1080:0:0:0:8:800:200c:417a\"" (pr-str b)))
+        b' (read-string "#inet-address \"1080:0:0:0:8:800:200c:417a\"")
+        _  (is (instance? InetAddress b'))
+        _  (is (= b b'))]))
+
+(deftest url-test
+  (let [a  (URL. "https://www.example.com:1080/docs/resource1.html?q=\"escape\"")
+        _  (is (= "#url \"https://www.example.com:1080/docs/resource1.html?q=\\\"escape\\\"\"" (pr-str a)))
+        a' (read-string "#url \"https://www.example.com:1080/docs/resource1.html?q=\\\"escape\\\"\"")
+        _  (is (instance? URL a'))
+        _  (is (= a a'))]))
+
+(deftest uri-test
+  (let [a  (URI. "https://www.example.com:1080/docs/resource1.html")
+        _  (is (= "#uri \"https://www.example.com:1080/docs/resource1.html\"" (pr-str a)))
+        a' (read-string "#uri \"https://www.example.com:1080/docs/resource1.html\"")
+        _  (is (instance? URI a'))
+        _  (is (= a a'))]))
+
+(deftest charset-test
+  (let [a  (Charset/forName "UTF-8")
+        _  (is (= "#charset \"UTF-8\"" (pr-str a)))
+        a' (read-string "#charset \"UTF-8\"")
+        _  (is (instance? Charset a'))
+        _  (is (= a a'))]))
+
+(deftest path-test
+  (is (= "#path \"/abc/x\\\"y\"" (pr-str (.toPath (io/file "/abc/x\"y")))))
+  (let [path (read-string "#path \"x\\\"y\"")]
+    (is (instance? Path path))
+    (is (= "x\"y" (str path)))))
 
 (deftest duration-test
   (let [t  (-> (Duration/ofHours 12) (.plusMinutes 30) (.plusSeconds 59))
@@ -416,32 +468,12 @@
         _  (is (instance? ChronoUnit t'))
         _  (is (= t t'))]))
 
-(deftest inet-address-test
-  (let [a  (InetAddress/getByName "127.0.0.1")
-        _  (is (= "#inet-address \"127.0.0.1\"" (pr-str a)))
-        a' (read-string "#inet-address \"127.0.0.1\"")
-        _  (is (instance? InetAddress a'))
-        _  (is (= a a'))
-
-        b  (InetAddress/getByName "1080:0:0:0:8:800:200C:417A")
-        _  (is (= "#inet-address \"1080:0:0:0:8:800:200c:417a\"" (pr-str b)))
-        b' (read-string "#inet-address \"1080:0:0:0:8:800:200c:417a\"")
-        _  (is (instance? InetAddress b'))
-        _  (is (= b b'))]))
-
-(deftest url-test
-  (let [a  (URL. "https://www.example.com:1080/docs/resource1.html?q=\"escape\"")
-        _  (is (= "#url \"https://www.example.com:1080/docs/resource1.html?q=\\\"escape\\\"\"" (pr-str a)))
-        a' (read-string "#url \"https://www.example.com:1080/docs/resource1.html?q=\\\"escape\\\"\"")
-        _  (is (instance? URL a'))
-        _  (is (= a a'))]))
-
-(deftest uri-test
-  (let [a  (URI. "https://www.example.com:1080/docs/resource1.html")
-        _  (is (= "#uri \"https://www.example.com:1080/docs/resource1.html\"" (pr-str a)))
-        a' (read-string "#uri \"https://www.example.com:1080/docs/resource1.html\"")
-        _  (is (instance? URI a'))
-        _  (is (= a a'))]))
+(deftest time-unit-test
+  (let [t  TimeUnit/SECONDS
+        _  (is (= "#time-unit :seconds" (pr-str t)))
+        t' (read-string "#time-unit :seconds")
+        _  (is (instance? TimeUnit t'))
+        _  (is (= t t'))]))
 
 (deftest atomic-boolean-test
   (is (= "#atomic-boolean true" (pr-str (AtomicBoolean. true))))
@@ -522,41 +554,3 @@
         _  (is (= 1 @(AtomicReferenceArray/.get a' 0)))
         _  (is (= 2 @(AtomicReferenceArray/.get a' 1)))
         _  (is (= 3 @(AtomicReferenceArray/.get a' 2)))]))
-
-(deftest soft-ref-test
-  (let [o  (atom 123)
-        a  (SoftReference. o)
-        _  (is (= "#soft-ref #atom 123" (pr-str a)))
-        a' (read-string "#soft-ref #atom 123")
-        _  (is (instance? SoftReference a'))
-        _  (is (= 123 @(SoftReference/.get a')))]))
-
-(deftest weak-ref-test
-  (let [o  (atom 123)
-        a  (WeakReference. o)
-        _  (is (= "#weak-ref #atom 123" (pr-str a)))
-        a' (read-string "#weak-ref #atom 123")
-        _  (is (instance? WeakReference a'))
-        _  (is (= 123 @(WeakReference/.get a')))]))
-
-(deftest charset-test
-  (let [a  (Charset/forName "UTF-8")
-        _  (is (= "#charset \"UTF-8\"" (pr-str a)))
-        a' (read-string "#charset \"UTF-8\"")
-        _  (is (instance? Charset a'))
-        _  (is (= a a'))]))
-
-(deftest thread-test
-  (let [t (Thread/currentThread)
-        _ (is (re-matches #"\#thread \[\d+ \"[^\"]+\"\]" (pr-str t)))
-
-        t (Thread. "the \"thread\"")
-        _ (is (= (str "#thread [" (.threadId t) " \"the \\\"thread\\\"\"]") (pr-str t)))
-
-        t (-> (Thread/ofVirtual)
-            (.name "abc")
-            (.start ^Runnable #(+ 1 2)))
-        _ (is (str/starts-with? (pr-str t) (str "#virtual-thread [" (.threadId t) " \"abc\"")))
-
-        _ (is (thrown-with-cause-msg? Exception #"No reader function for tag thread"
-                (read-string "#thread [123 \"name\"]")))]))

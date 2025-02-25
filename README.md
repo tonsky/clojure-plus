@@ -10,7 +10,7 @@ Add this to deps.edn:
 io.github.tonsky/clojure-plus {:mvn/version "1.0.1"}
 ```
 
-## Functions
+## clojure+.core
 
 ### if+
 
@@ -112,7 +112,191 @@ Declare variables inside conditions, just like if+:
   [x y]) ;; => [2 3]
 ```
 
-### clojure+.walk
+## clojure+.print
+
+Clojure does a stellar job printing built-in datastructures like maps, vectors, lists and records. Everything else looks... less elegant. Up to 1.6 it at least looked compact:
+
+```clojure
+=> (atom 42)
+#<Atom@2fc0cc3: 42>
+
+=> (io/file "/")
+#<File />
+
+=> *ns*
+#<Namespace user>
+```
+
+But 1.7 made it too noisy:
+
+```clojure
+=> (atom 123)
+#object[clojure.lang.Atom 0x23c650a3 {:status :ready, :val 123}]
+
+user=> (io/file "/")
+#object[java.io.File 0x7d2a6eac "/"]
+
+=> *ns*
+#object[clojure.lang.Namespace 0x3961a41a "user"]
+
+=> (transient [1 2 3])
+#object[clojure.lang.PersistentVector$TransientVector 0x41c89d2f "clojure.lang.PersistentVector$TransientVector@41c89d2f"]
+```
+
+Atom is one of the core primitives of the language, and yet it lacks good print representation. Same for other things: arrays, refs, transients, namespaces, files, futures, java.time objects etc.
+
+This library solves this!
+
+```clojure
+=> (atom 123)
+#atom 123
+
+=> (io/file "/")
+#file "/"
+
+=> *ns*
+#ns user
+
+=> (transient [1 2 3])
+#transient [1 2 3]
+```
+
+Seeing things this clearly greatly improves day-to-day Clojure experience. If you expect these things, sure, you can take steps and print them. But more often than not they just pop in random places, during REPL explorations, debug printing etc. It’s sooooo nice to just see what they are. Right away. With no extra preparation.
+
+Seeing into arrays is especially nice:
+
+```clojure
+user=> (int-array [1 2 3])
+; before
+#object["[I" 0x595f4da5 "[I@595f4da5"]
+; after
+#ints [1 2 3]
+```
+
+Reader tags also make constructing things easier:
+
+```clojure
+; before
+(java.nio.file.Path/of "/" (make-array String 0))
+(into clojure.lang.PersistentQueue/EMPTY [1 2 3])
+
+; after
+#path "/"
+#queue [1 2 3]
+```
+
+To enable all this, just:
+
+```clojure
+(require 'clojure+.print)
+(clojure+.print/install!)
+```
+
+You can pass `:include`/`:exclude` options or choose to intall only readers or only printers:
+
+```clojure
+(clojure+.print/install-printers! {:include ['queue 'file]})
+(clojure+.print/install-readers! {:exclude ['bytes 'ns]})
+```
+
+Note: this representation doesn't track identity. So printing `atom` and reading it back will produce a new object instance. Same goes for arrays, transients etc.
+
+Full list of supported types:
+
+Arrays:
+
+```
+byte[]                #bytes "CAFEBABE"
+boolean[]             #booleans [true false]
+char[]                #chars [\a \b \c]
+short[]               #shorts [1 2 3]
+int[]                 #ints [1 2 3]
+long[]                #longs [1 2 3]
+float[]               #floats [1.0 2.0 3.5]
+double[]              #doubles [1.0 2.0 3.5]
+String[]              #strings ["a" "b" "c"]
+Object[]              #objects [nil nil]
+Other arrays          #array ^java.io.File/1 [#file ...]
+                      #array ^String/2 [["a"] ["b" "c"]]
+```
+
+References:
+
+```
+Atom                  #atom 123
+Agent                 #agent 123
+Ref                   #ref 123
+Volatile              #volatile 123
+Promise               #promise <pending...>
+                      #promise 123
+Delay                 #delay <pending...>
+                      #delay 123
+Future                #future <pending...>
+                      #future 123
+SoftReference         #soft-ref #object[...]
+WeakReference         #weak-ref #object[...]
+AtomicBoolean         #atomic-boolean true
+AtomicInteger         #atomic-int 123
+AtomicLong            #atomic-long 123
+AtomicReference       #atomic-ref #object[...]
+AtomicIntegerArray    #atomic-ints [1 2 3]
+AtomicLongArray       #atomic-longs [1 2 3]
+AtomicReferenceArray  #atomic-refs [#object[...] ...]
+```
+
+Data structures:
+
+```
+PersistentQueue       #queue [1 2 3]
+Transients            #transient [1 2 3]
+                      #transient {:a 1 :b 2}
+                      #transient #{:a :b :c}
+```
+             
+
+java.time:
+
+```
+Duration              #duration "PT12H30M59S"
+Instant               #instant "2025-02-20T02:58:07.703Z"
+LocalDate             #local-date "2025-02-20"
+LocalDateTime         #local-date-time "2025-02-20T02:58:07.703"
+LocalTime             #local-time "02:58:07.703"
+MonthDay              #month-day "--02-29"
+OffsetDateTime        #offset-date-time "2025-02-20T02:58:07.703Z"
+OffsetTime            #offset-time "02:58:07.703Z"
+Period                #period "P2Y3M4D"
+Year                  #year 2025
+YearMonth             #year-month "2025-02"
+ZonedDateTime         #zoned-date-time "2025-02-20T02:58:07.703+01:00[Europe/Berlin]"
+ZoneId                #zone-id "Europe/Berlin"
+ZoneOffset            #zone-offset "+03:45"
+DayOfWeek             #day-of-week :wednesday
+Month                 #month :february
+ChronoUnit            #chrono-unit :seconds
+```
+
+And the rest:
+
+```
+File                  #file "/"
+Path                  #path "/"
+Namespace             #ns clojure+.print
+Thread                #thread [35 "clojure-agent-send-off-pool-1"]
+                      ^:virtual #thread [36 "vvv"]
+InetAddress           #inet-address "127.0.0.1"
+                      #inet-address "1080:0:0:0:8:800:200c:417a"
+URL                   #url "https://example.com"
+URI                   #uri "https://example.com"
+TimeUnit              #time-unit :seconds
+Charset               #charset "UTF-8"
+```
+
+Ideas to what else would be convenient to print are welcome!
+
+This namespace was inspired by Ivan Grishaev’s [taggie](https://github.com/igrishaev/taggie).
+
+## clojure+.walk
 
 A drop-in replacement for `clojure.walk` that does not recreate data structures if they didn’t change (result of transform funcion is `identical?`)
 

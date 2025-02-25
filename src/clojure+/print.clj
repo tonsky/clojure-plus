@@ -2,7 +2,7 @@
   (:require
    [clojure.string :as str])
   (:import
-   [clojure.lang Atom Agent ATransientSet Delay IDeref IPending ISeq Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
+   [clojure.lang Atom Agent ATransientSet Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
    [java.io File Writer]
    [java.lang.ref SoftReference WeakReference]
    [java.lang.reflect Field]
@@ -14,99 +14,63 @@
    [java.util.concurrent Future TimeUnit]
    [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
 
-(defmacro defprint [type [value writer] & body]
-  `(do
-     (defmethod print-method ~type [~(vary-meta value assoc :tag type)
-                                    ~(vary-meta writer assoc :tag 'java.io.Writer)]
-       ~@body)
-     (defmethod print-dup ~type [~value ~writer]
-       (print-method ~value ~writer))))
+(def ^:private *catalogue
+  (atom #{}))
 
-(defmacro defprint-read-str
-  ([cls tag ctor]
-   `(defprint-read-str ~cls ~tag ~ctor str))
-  ([cls tag ctor getter]
-  `(do
-     (defprint ~cls [t# w#]
-       (.write w# ~(str "#" tag " \""))
-       (.write w# (str/replace (~getter t#) "\"" "\\\""))
-       (.write w# "\""))
+(defn- pr-on [w x]
+  (if *print-dup*
+    (print-dup x w)
+    (print-method x w))
+  nil)
 
-     (defn ~(symbol (str "read-" tag)) [^String s#]
-       (~ctor s#))
+(defmacro defliteral [cls getter quoted-tag ctor]
+  (let [tag       (second quoted-tag)
+        print-sym (symbol (str "print-" tag))
+        read-sym  (symbol (str "read-" tag))
+        val-sym   (with-meta (gensym "v") {:tag cls})]
+    `(do
+       (defn ~print-sym [~val-sym ^Writer w#]
+         (.write w# ~(str "#" tag " "))
+         (let [rep# (~getter ~val-sym)]
+           (if (string? rep#)
+             (do
+               (.write w# "\"")
+               (.write w# (str/replace rep# "\"" "\\\""))
+               (.write w# "\""))
+             (pr-on w# rep#))))
 
-     (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag)))))))
+       (defn ~read-sym [s#]
+         (~ctor s#))
+     
+       (swap! *catalogue conj {:class ~cls :tag ~quoted-tag :print (var ~print-sym) :read (var ~read-sym)}))))
 
-(defmacro defprint-read-value [cls tag ctor getter]
-  `(do
-     (defprint ~cls [v# w#]
-       (.write w# ~(str "#" tag " "))
-       (pr-on (~getter v#) w#))
+(defmacro defenum [cls quoted-tag values]
+  (let [tag       (second quoted-tag)
+        print-sym (symbol (str "print-" tag))
+        read-sym  (symbol (str "read-" tag))]
+    `(do
+       (defn ~print-sym [v# ^Writer w#]
+         (.write w# ~(str "#" tag " :"))
+         (.write w# (str/lower-case (str v#))))
 
-     (defn ~(symbol (str "read-" tag)) [s#]
-       (~ctor s#))
-
-     (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag))))))
-
-(defmacro defprint-read-enum [cls tag values]
-  `(do
-     (defprint ~cls [v# w#]
-       (.write w# ~(str "#" tag " :"))
-       (.write w# (str/lower-case (str v#))))
-
-     (defn ~(symbol (str "read-" tag)) [kw#]
-       (case kw#
-         ~@(for [sym values
-                 kv  [(-> sym str str/lower-case keyword)
-                      (symbol (str cls) (str sym))]]
-             kv)))
-
-     (alter-var-root #'*data-readers* assoc (quote ~tag) (var ~(symbol (str "read-" tag))))))
-
+       (defn ~read-sym [kw#]
+         (case kw#
+           ~@(for [sym values
+                   kv  [(-> sym str str/lower-case keyword)
+                        (symbol (str cls) (str sym))]]
+               kv)))
+     
+       (swap! *catalogue conj {:class ~cls :tag ~quoted-tag :print (var ~print-sym) :read (var ~read-sym)}))))
 
 (defmacro prefer [a b]
   `(do
      (prefer-method print-method ~a ~b)
      (prefer-method print-dup ~a ~b)))
 
-(def pr-on
-  @#'clojure.core/pr-on)
-
-;; File
-
-(defprint File [file w]
-  (.write w "#file \"")
-  (.write w (str/replace (.getPath file) "\"" "\\\""))
-  (.write w "\""))
-
-(defn read-file [^String s]
-  (File. s))
-
-(alter-var-root #'*data-readers* assoc 'file #'read-file)
-
-
-;; Path
-
-(defprint Path [path w]
-  (.write w "#path \"")
-  (.write w (str/replace (str path) "\"" "\\\""))
-  (.write w "\""))
-
-(defn read-path [^String s]
-  (Path/of s (make-array String 0)))
-
-(alter-var-root #'*data-readers* assoc 'path #'read-path)
-
 
 ;; arrays
 
-(defprint boolean/1 [arr w]
-  (.write w "#booleans ")
-  (pr-on (vec arr) w))
-
-(alter-var-root #'*data-readers* assoc 'booleans #'boolean-array)
-
-(defprint byte/1 [arr w]
+(defn print-bytes [^bytes arr ^Writer w]
   (.write w "#bytes \"")
   (dotimes [i (alength arr)]
     (.write w (format "%02X" (Byte/toUnsignedInt (aget arr i)))))
@@ -126,73 +90,44 @@
         (aset arr idx (byte b))))
     arr))
 
-(alter-var-root #'*data-readers* assoc 'bytes #'read-bytes)
-
-(defprint char/1 [arr w]
-  (.write w "#chars ")
-  (pr-on (vec arr) w))
-
-(alter-var-root #'*data-readers* assoc 'chars #'char-array)
-
-(defprint short/1 [arr w]
-  (.write w "#shorts ")
-  (pr-on (vec arr) w))
-
-(alter-var-root #'*data-readers* assoc 'shorts #'short-array)
-
-(defprint int/1 [arr w]
-  (.write w "#ints ")
-  (pr-on (vec arr) w))
-
-(alter-var-root #'*data-readers* assoc 'ints #'int-array)
-
-(defprint long/1 [arr w]
-  (.write w "#longs ")
-  (pr-on (vec arr) w))
-
-(alter-var-root #'*data-readers* assoc 'longs #'long-array)
-
-(defprint float/1 [arr w]
-  (.write w "#floats ")
-  (pr-on (vec arr) w))
-
-(alter-var-root #'*data-readers* assoc 'floats #'float-array)
-
-(defprint double/1 [arr w]
-  (.write w "#doubles ")
-  (pr-on (vec arr) w))
-
-(alter-var-root #'*data-readers* assoc 'doubles #'double-array)
+(swap! *catalogue conj {:class byte/1  :print #'print-bytes :tag 'bytes :read #'read-bytes})
 
 
-;; #strings
+(defn make-print-array [tag]
+  (fn [arr ^Writer w]
+    (.write w "#")
+    (.write w (str tag))
+    (.write w " ")
+    (pr-on w (vec arr))))
 
-(defprint String/1 [arr w]
-  (.write w "#strings ")
-  (pr-on (vec arr) w))
+(swap! *catalogue conj {:class boolean/1 :print (make-print-array 'booleans) :tag 'booleans :read #'boolean-array})
+(swap! *catalogue conj {:class char/1    :print (make-print-array 'chars)    :tag 'chars    :read #'char-array})
+(swap! *catalogue conj {:class short/1   :print (make-print-array 'shorts)   :tag 'shorts   :read #'short-array})
+(swap! *catalogue conj {:class int/1     :print (make-print-array 'ints)     :tag 'ints     :read #'int-array})
+(swap! *catalogue conj {:class long/1    :print (make-print-array 'longs)    :tag 'longs    :read #'long-array})
+(swap! *catalogue conj {:class float/1   :print (make-print-array 'floats)   :tag 'floats   :read #'float-array})
+(swap! *catalogue conj {:class double/1  :print (make-print-array 'doubles)  :tag 'doubles  :read #'double-array})
 
 (defn read-strings [xs]
   (into-array String xs))
 
-(alter-var-root #'*data-readers* assoc 'strings #'read-strings)
+(swap! *catalogue conj {:class String/1 :print (make-print-array 'strings) :tag 'strings :read #'read-strings})
 
-
-;; #objects & #array
 
 (defn- print-array [arr w]
   (let [cls (class arr)]
     (if (and cls (.isArray cls))
       (@#'clojure.core/print-sequential "[" print-array " " "]" arr w)
-      (pr-on arr w))))
+      (pr-on w arr))))
 
-(defprint Object/1 [arr w]
+(defn print-objects [^Object/1 arr ^Writer w]
   (let [cls  (class arr)
         base (.componentType cls)]
     (cond
       (= Object base)
       (do
         (.write w "#objects ")
-        (pr-on (vec arr) w))
+        (pr-on w (vec arr)))
       
       
       :else
@@ -200,13 +135,14 @@
         (.write w "#array ^")
         (if (= "java.lang" (.getPackageName cls))
           (.write w (subs (pr-str cls) (count "java.lang.")))
-          (pr-on cls w))
+          (pr-on w cls))
         (.write w " ")
         (print-array arr w)))))
 
-(alter-var-root #'*data-readers* assoc 'objects #'object-array)
+(swap! *catalogue conj {:class Object/1 :print #'print-objects :tag 'objects :read #'object-array})
 
-(defn- read-array [vals]
+
+(defn read-array [vals]
   (let [class (:tag (meta vals))
         class (cond-> class
                 (symbol? class) resolve)
@@ -220,175 +156,130 @@
           x)))
     arr))
 
-(alter-var-root #'*data-readers* assoc 'array #'read-array)
+(swap! *catalogue conj {:class Object/1 :print #'print-objects :tag 'array :read #'read-array})
 
 
-;; atom
+;; refs
 
-(defprint Atom [a w]
-  (.write w "#atom ")
-  (pr-on @a w))
+(defn make-print-ref [tag]
+  (fn [ref ^Writer w]
+    (.write w "#")
+    (.write w (str tag))
+    (.write w " ")
+    (pr-on w @ref)))
 
-(alter-var-root #'*data-readers* assoc 'atom #'atom)
-
-
-;; agent
-
-(defprint Agent [a w]
-  (.write w "#agent ")
-  (pr-on @a w))
-
-(alter-var-root #'*data-readers* assoc 'agent #'agent)
+(swap! *catalogue conj {:class Atom     :print (make-print-ref 'atom)     :tag 'atom     :read #'atom})
+(swap! *catalogue conj {:class Agent    :print (make-print-ref 'agent)    :tag 'agent    :read #'agent})
+(swap! *catalogue conj {:class Ref      :print (make-print-ref 'ref)      :tag 'ref      :read #'ref})
+(swap! *catalogue conj {:class Volatile :print (make-print-ref 'volatile) :tag 'volatile :read #'volatile!})
 
 
-;; ref
-
-(defprint Ref [a w]
-  (.write w "#ref ")
-  (pr-on @a w))
-
-(alter-var-root #'*data-readers* assoc 'ref #'ref)
-
-
-;; Volatile
-
-(defprint Volatile [a w]
-  (.write w "#volatile ")
-  (pr-on @a w))
-
-(alter-var-root #'*data-readers* assoc 'volatile #'volatile!)
-
-
-;; promise
-
-(defprint IPending [ref w]
+(defn print-promise [^IPending ref ^Writer w]
   (.write w "#promise ")
   (if (realized? ref)
-    (pr-on @ref w)
-    (.write w ":<pending...>")))
+    (pr-on w @ref)
+    (.write w "<pending...>")))
 
 (defn- read-promise [val]
-  (if (= :<pending...> val)
+  (if (= '<pending...> val)
     (promise)
     (deliver (promise) val)))
 
-(alter-var-root #'*data-readers* assoc 'promise #'read-promise)
-
 (prefer IPending IDeref)
-
 (prefer ISeq IPending)
+(swap! *catalogue conj {:class IPending :print print-promise :tag 'promise :read #'read-promise})
 
 
-;; delay
-
-(defprint Delay [ref w]
+(defn print-delay [^Delay ref ^Writer w]
   (.write w "#delay ")
   (if (realized? ref)
-    (pr-on @ref w)
-    (.write w ":<pending...>")))
+    (pr-on w @ref)
+    (.write w "<pending...>")))
 
 (defn- read-delay [val]
-  (if (= :<pending...> val)
-    (throw (ex-info "Can’t read back :<pending...> delay" {}))
+  (if (= '<pending...> val)
+    (throw (ex-info "Can’t read back <pending...> delay" {}))
     (doto (delay val)
       (deref))))
 
-(alter-var-root #'*data-readers* assoc 'delay #'read-delay)
+(swap! *catalogue conj {:class Delay :print print-delay :tag 'delay :read #'read-delay})
 
 
-;; java.util.concurrent
-
-(defprint Future [ref w]
+(defn print-future [^Future ref ^Writer w]
   (.write w "#future ")
   (if (.isDone ref)
-    (pr-on (.get ref) w)
-    (.write w ":<pending...>")))
+    (pr-on w (.get ref))
+    (.write w "<pending...>")))
 
 (defn- read-future [val]
-  (if (= :<pending...> val)
-    (throw (ex-info "Can’t read back :<pending...> future" {}))
+  (if (= '<pending...> val)
+    (throw (ex-info "Can’t read back <pending...> future" {}))
     (doto (future val)
       (deref))))
 
-(alter-var-root #'*data-readers* assoc 'future #'read-future)
-
 (prefer Future IPending)
-
 (prefer Future IDeref)
+(swap! *catalogue conj {:class Future :print print-future :tag 'future :read #'read-future})
 
 
-(defprint-read-enum TimeUnit time-unit
-  [DAYS HOURS MICROSECONDS MILLISECONDS MINUTES NANOSECONDS SECONDS])
+;; #ns
+
+(defliteral Namespace .getName 'ns the-ns)
 
 
-;; queue
+;; #transient
 
-(defprint PersistentQueue [q w]
-  (.write w "#queue ")
-  (pr-on (vec q) w))
-
-(defn- read-queue [xs]
-  (into PersistentQueue/EMPTY xs))
-
-(alter-var-root #'*data-readers* assoc 'queue #'read-queue)
-
-
-;; Namespace
-
-(defprint Namespace [n w]
-  (.write w "#ns ")
-  (.write w (str n)))
-
-(defn- read-ns [sym]
-  (the-ns sym))
-
-(alter-var-root #'*data-readers* assoc 'ns #'read-ns)
-
-
-;; Transients
-
-(defprint PersistentVector$TransientVector [v w]
+(defn print-transient-vector [^PersistentVector$TransientVector v ^Writer w]
   (let [cnt (count v)]
     (.write w "#transient [")
     (dotimes [i cnt]
-      (pr-on (nth v i) w)
+      (pr-on w (nth v i))
       (when (< i (dec cnt))
         (.write w " ")))
     (.write w "]")))
+
+(swap! *catalogue conj {:class PersistentVector$TransientVector :print #'print-transient-vector :tag 'transient :read #'transient})
+
 
 (def ^:private ^Field array-map-array-field
   (doto (.getDeclaredField PersistentArrayMap$TransientArrayMap "array")
     (.setAccessible true)))
 
-(defprint PersistentArrayMap$TransientArrayMap [m w]
+(defn print-transient-array-map [^PersistentArrayMap$TransientArrayMap m ^Writer w]
   (let [cnt (count m)
         arr ^objects (.get array-map-array-field m)]
     (.write w "#transient {")
     (dotimes [i cnt]
-      (pr-on (aget arr (-> i (* 2))) w)
+      (pr-on w (aget arr (-> i (* 2))))
       (.write w " ")
-      (pr-on (aget arr (-> i (* 2) (+ 1))) w)
+      (pr-on w (aget arr (-> i (* 2) (+ 1))))
       (when (< i (dec cnt))
         (.write w ", ")))
     (.write w "}")))
+
+(swap! *catalogue conj {:class PersistentArrayMap$TransientArrayMap :print #'print-transient-array-map :tag 'transient :read #'transient})
+
 
 (def ^:private ^Field hash-map-edit-field
   (doto (.getDeclaredField PersistentHashMap$TransientHashMap "edit")
     (.setAccessible true)))
 
-(defprint PersistentHashMap$TransientHashMap [m w]
+(defn print-transient-hash-map [^PersistentHashMap$TransientHashMap m ^Writer w]
   (let [edit       ^AtomicReference (.get hash-map-edit-field m)
         edit-value (.get edit)
         m'         (persistent! m)]
     (.write w "#transient ")
-    (pr-on m' w)
+    (pr-on w m')
     (.set edit edit-value)))
+
+(swap! *catalogue conj {:class PersistentHashMap$TransientHashMap :print #'print-transient-hash-map :tag 'transient :read #'transient})
+
 
 (def ^:private ^Field set-impl-field
   (doto (.getDeclaredField ATransientSet "impl")
     (.setAccessible true)))
 
-(defprint ATransientSet [s w]
+(defn print-transient-set [^ATransientSet s ^Writer w]
   (let [m          ^PersistentHashMap$TransientHashMap (.get set-impl-field s)
         edit       ^AtomicReference (.get hash-map-edit-field m)
         edit-value (.get edit)
@@ -396,57 +287,108 @@
         cnt        (count m')]
     (.write w "#transient #{")
     (doseq [[k idx] (map vector (keys m') (range))]
-      (pr-on k w)
+      (pr-on w k)
       (when (< idx (dec cnt))
         (.write w " ")))
     (.write w "}")
     (.set edit edit-value)))
 
-(alter-var-root #'*data-readers* assoc 'transient #'transient)
+(swap! *catalogue conj {:class ATransientSet :print #'print-transient-set :tag 'transient :read #'transient})
 
 
-;; java.time
+;; #queue
 
-(defprint-read-str Duration       duration         Duration/parse)
-(defprint-read-str Instant        instant          Instant/parse)
-(defprint-read-str LocalDate      local-date       LocalDate/parse)
-(defprint-read-str LocalDateTime  local-date-time  LocalDateTime/parse)
-(defprint-read-str LocalTime      local-time       LocalTime/parse)
-(defprint-read-str MonthDay       month-day        MonthDay/parse)
-(defprint-read-str OffsetDateTime offset-date-time OffsetDateTime/parse)
-(defprint-read-str OffsetTime     offset-time      OffsetTime/parse)
-(defprint-read-str Period         period           Period/parse)
-(defprint-read-str Year           year             Year/parse)
-(defprint-read-str YearMonth      year-month       YearMonth/parse)
-(defprint-read-str ZonedDateTime  zoned-date-time  ZonedDateTime/parse)
-(defprint-read-str ZoneId         zone-id          ZoneId/of)
-(defprint-read-str ZoneOffset     zone-offset      ZoneOffset/of)
+(defliteral PersistentQueue vec 'queue #(into PersistentQueue/EMPTY %))
 
-(defprint-read-enum DayOfWeek day-of-week
-  [MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY])
 
-(defprint-read-enum Month month
-  [JANUARY FEBRUARY MARCH APRIL MAY JUNE JULY AUGUST SEPTEMBER OCTOBER NOVEMBER DECEMBER])
+;; java.io
 
-(defprint-read-enum ChronoUnit chrono-unit
-  [NANOS MICROS MILLIS SECONDS MINUTES HOURS HALF_DAYS DAYS WEEKS MONTHS YEARS DECADES CENTURIES MILLENNIA ERAS])
+(defliteral File .getPath 'file #(File. ^String %))
+
+
+;; java.lang
+
+(defn print-thread [^Thread t ^Writer w]
+  (when (.isVirtual t)
+    (.write w "^:virtual "))
+  (.write w "#thread [")
+  (pr-on w (.threadId t))
+  (.write w " ")
+  (pr-on w (.getName t))
+  (let [g (.getThreadGroup t)]
+    (when (and g (not= g (.getThreadGroup (Thread/currentThread))))
+      (.write w " ")
+      (pr-on w (.getName g))))
+  (.write w "]"))
+
+(swap! *catalogue conj {:class Thread :print #'print-thread :tag 'thread})
+
+
+;; java.lang.ref
+
+(defliteral SoftReference .get 'soft-ref SoftReference.)
+(defliteral WeakReference .get 'weak-ref WeakReference.)
 
 
 ;; java.net
 
-(defprint-read-str InetAddress inet-address InetAddress/getByName .getHostAddress)
-(defprint-read-str URI         uri          URI.)
-(defprint-read-str URL         url          URL.)
+(defliteral InetAddress .getHostAddress 'inet-address InetAddress/getByName)
+(defliteral URI         str             'uri          URI.)
+(defliteral URL         str             'url          URL.)
+
+
+
+;; java.nio.charset
+
+(defliteral Charset .name 'charset Charset/forName)
+
+
+;; java.nio.file
+
+(defliteral Path str 'path #(Path/of % (make-array String 0)))
+
+
+;; java.time
+
+(defliteral Duration       str 'duration         Duration/parse)
+(defliteral Instant        str 'instant          Instant/parse)
+(defliteral LocalDate      str 'local-date       LocalDate/parse)
+(defliteral LocalDateTime  str 'local-date-time  LocalDateTime/parse)
+(defliteral LocalTime      str 'local-time       LocalTime/parse)
+(defliteral MonthDay       str 'month-day        MonthDay/parse)
+(defliteral OffsetDateTime str 'offset-date-time OffsetDateTime/parse)
+(defliteral OffsetTime     str 'offset-time      OffsetTime/parse)
+(defliteral Period         str 'period           Period/parse)
+(defliteral Year           str 'year             Year/parse)
+(defliteral YearMonth      str 'year-month       YearMonth/parse)
+(defliteral ZonedDateTime  str 'zoned-date-time  ZonedDateTime/parse)
+(defliteral ZoneId         str 'zone-id          ZoneId/of)
+(defliteral ZoneOffset     str 'zone-offset      #(ZoneOffset/of ^String %))
+
+(defenum DayOfWeek 'day-of-week
+  [MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY])
+
+(defenum Month 'month
+  [JANUARY FEBRUARY MARCH APRIL MAY JUNE JULY AUGUST SEPTEMBER OCTOBER NOVEMBER DECEMBER])
+
+(defenum ChronoUnit 'chrono-unit
+  [NANOS MICROS MILLIS SECONDS MINUTES HOURS HALF_DAYS DAYS WEEKS MONTHS YEARS DECADES CENTURIES MILLENNIA ERAS])
+
+
+;; java.util.concurrent
+
+(defenum TimeUnit 'time-unit
+  [DAYS HOURS MICROSECONDS MILLISECONDS MINUTES NANOSECONDS SECONDS])
 
 
 ;; java.util.concurrent.atomic
 
-(defprint-read-value AtomicBoolean   atomic-boolean AtomicBoolean.   .get)
-(defprint-read-value AtomicInteger   atomic-int     AtomicInteger.   .get)
-(defprint-read-value AtomicLong      atomic-long    AtomicLong.      .get)
-(defprint-read-value AtomicReference atomic-ref     AtomicReference. .get)
+(defliteral AtomicBoolean   .get 'atomic-boolean AtomicBoolean.)
+(defliteral AtomicInteger   .get 'atomic-int     AtomicInteger.)
+(defliteral AtomicLong      .get 'atomic-long    AtomicLong.)
+(defliteral AtomicReference .get 'atomic-ref     AtomicReference.)
 
-(defprint AtomicIntegerArray [a w]
+(defn print-atomic-ints [^AtomicIntegerArray a ^Writer w]
   (.write w "#atomic-ints [")
   (dotimes [i (.length a)]
     (.write w (str (.get a i)))
@@ -457,10 +399,10 @@
 (defn read-atomic-ints [xs]
   (AtomicIntegerArray. (int-array xs)))
 
-(alter-var-root #'*data-readers* assoc 'atomic-ints #'read-atomic-ints)
+(swap! *catalogue conj {:class AtomicIntegerArray :print #'print-atomic-ints :tag 'atomic-ints :read #'read-atomic-ints})
 
 
-(defprint AtomicLongArray [a w]
+(defn print-atomic-longs [^AtomicLongArray a ^Writer w]
   (.write w "#atomic-longs [")
   (dotimes [i (.length a)]
     (.write w (str (.get a i)))
@@ -471,13 +413,13 @@
 (defn read-atomic-longs [xs]
   (AtomicLongArray. (long-array xs)))
 
-(alter-var-root #'*data-readers* assoc 'atomic-longs #'read-atomic-longs)
+(swap! *catalogue conj {:class AtomicLongArray :print #'print-atomic-longs :tag 'atomic-longs :read #'read-atomic-longs})
 
 
-(defprint AtomicReferenceArray [a w]
+(defn print-atomic-refs [^AtomicReferenceArray a ^Writer w]
   (.write w "#atomic-refs [")
   (dotimes [i (.length a)]
-    (pr-on (.get a i) w)
+    (pr-on w (.get a i))
     (when (< i (dec (.length a)))
       (.write w " ")))
   (.write w "]"))
@@ -485,35 +427,90 @@
 (defn read-atomic-refs [xs]
   (AtomicReferenceArray. ^objects (into-array Object xs)))
 
-(alter-var-root #'*data-readers* assoc 'atomic-refs #'read-atomic-refs)
+(swap! *catalogue conj {:class AtomicReferenceArray :print #'print-atomic-refs :tag 'atomic-refs :read #'read-atomic-refs})
 
 
-;; java.lang.ref
+;; install
 
-(defprint-read-value SoftReference soft-ref SoftReference. .get)
-(defprint-read-value WeakReference weak-ref WeakReference. .get)
+(defn- catalogue [{:keys [include exclude]}]
+  (cond->> @*catalogue
+    exclude (remove #((set exclude) (:tag %)))
+    include (filter #((set include) (:tag %)))))
 
+(defn install-printers!
+  "Install printers for most of Clojure built-in data structures.
+   
+   After running this, things like atoms and transients will print like this:
+   
+     (atom 123)          ; => #atom 123
+     (transient [1 2 3]) ; => #transient [1 2 3]
+   
+   Possible opts:
+   
+     :include :: [sym ...] - list of tags to include (white list)
+     :exclude :: [sym ...] - list of tags to exclude (black list)"
+  ([]
+   (install-printers! {}))
+  ([opts]
+   (let [catalogue (catalogue opts)]
+     (doseq [{:keys [class print]} catalogue]
+       (MultiFn/.addMethod print-method class print)
+       (MultiFn/.addMethod print-dup class print)))))
 
-;; java.nio.charset
+(defn data-readers
+  "List of all readers this library can install. Returns map of {symbol -> var}
+   
+   Possible opts:
+   
+     :include :: [sym ...] - list of tags to include (white list)
+     :exclude :: [sym ...] - list of tags to exclude (black list)"
+  ([]
+   (data-readers {}))
+  ([opts]
+   (into {} (map (juxt :tag :read) (catalogue opts)))))
 
-(defprint-read-str Charset charset Charset/forName .name)
+(defn install-readers!
+  "Install readers for most of Clojure built-in data structures.
+   
+   After running this, things like atoms and transients will readable by reader:
+   
+     (read-string \"#atom 123\")
+     (read-string \"#transient [1 2 3]\")
+   
+   Possible opts:
+   
+     :include :: [sym ...] - list of tags to include (white list)
+     :exclude :: [sym ...] - list of tags to exclude (black list)"
+  ([]
+   (install-readers! {}))
+  ([opts]
+   (let [readers (data-readers opts)]
+     (alter-var-root #'*data-readers* merge readers)
+     (when (thread-bound? #'*data-readers*)
+       (set! *data-readers* (.getRawRoot #'*data-readers*))))))
 
+(defn install!
+  "Install both printers and readers for most of Clojure built-in data structures.
+   
+   After running this, things like atoms and transients will print like this:
+   
+     (atom 123)          ; => #atom 123
+     (transient [1 2 3]) ; => #transient [1 2 3]
+   
+   and will become readable by reader:
+   
+     (read-string \"#atom 123\")
+     (read-string \"#transient [1 2 3]\")
+   
+   Note: this representation doesn't track identity. So printing atom and reading it back
+   will produce a new atom. Same goes for arrays, transients etc.
 
-;; java.lang
-
-(defprint Thread [t w]
-  (if (.isVirtual t)
-    (.write w "#virtual-thread [")
-    (.write w "#thread ["))
-  (pr-on (.threadId t) w)
-  (.write w " ")
-  (pr-on (.getName t) w)
-  (let [g (.getThreadGroup t)]
-    (when (and g (not= g (.getThreadGroup (Thread/currentThread))))
-      (.write w " ")
-      (pr-on (.getName g) w)))
-  (.write w "]"))
-
-
-(when (thread-bound? #'*data-readers*)
-  (set! *data-readers* (.getRawRoot #'*data-readers*)))
+   Possible opts:
+   
+     :include :: [sym ...] - list of tags to include (white list)
+     :exclude :: [sym ...] - list of tags to exclude (black list)"
+  ([]
+   (install! {}))
+  ([opts]
+   (install-printers! opts)
+   (install-readers! opts)))
