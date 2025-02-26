@@ -1,11 +1,12 @@
 (ns clojure+.print-test
   (:require
    [clojure.java.io :as io]
+   [clojure.pprint :as pprint]
    [clojure.string :as str]
-   [clojure.test :as test :refer [is deftest testing use-fixtures]]
+   [clojure.test :as test :refer [are deftest is testing use-fixtures]]
    [clojure+.print :as print])
   (:import
-   [clojure.lang Atom Agent ATransientSet Delay ExceptionInfo IDeref IPending ISeq Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
+   [clojure.lang Atom Agent ATransientSet Delay ExceptionInfo IDeref IPending ISeq Namespace PersistentQueue PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Volatile]
    [java.io File]
    [java.lang.ref SoftReference WeakReference]
    [java.net InetAddress URI URL]
@@ -13,6 +14,7 @@
    [java.nio.file Path]
    [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
    [java.time.temporal ChronoUnit]
+   [java.util ArrayDeque List]
    [java.util.concurrent Future TimeUnit]
    [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
 
@@ -21,6 +23,21 @@
     (print/install!)
     (f)))
 
+(deftest basics-test
+  (are [x s] (= s (pr-str x))
+    [1 2 3]                "[1 2 3]"
+    (list 1 2 3)           "(1 2 3)"
+    (map inc [1 2 3])      "(2 3 4)"
+    (concat [1 2] [3])     "(1 2 3)"
+    (cons 1 [2 3])         "(1 2 3)"
+    (range 1 4)            "(1 2 3)"
+    (List/of 1 2 3)        "[1 2 3]"
+    (first {:a 1})         "[:a 1]"
+    {:a 1 :b 2}            "{:a 1, :b 2}"
+    #{:a :b :c}            "#{:c :b :a}"
+    (sorted-map :a 1 :b 2) "{:a 1, :b 2}"
+    (sorted-set :a :b :c)  "#{:a :b :c}"
+    #'+                    "#'clojure.core/+"))
 
 (deftest booleans-test
   (is (= "#booleans [true false true]"
@@ -179,6 +196,12 @@
     (is (instance? Volatile volatile))
     (is (= 123 @volatile))))
 
+(deftest reduced-test
+  (is (= "#reduced 123" (pr-str (reduced 123))))
+  (let [reduced (read-string "#reduced 123")]
+    (is (instance? Reduced reduced))
+    (is (= 123 @reduced))))
+
 (deftest promise-test
   (is (= "#promise <pending...>" (pr-str (promise))))
   (let [promise (read-string "#promise <pending...>")]
@@ -212,6 +235,20 @@
     (is (instance? Future future))
     (is (realized? future))
     (is (= 123 @future))))
+
+(deftest fn-test
+  (let [f1 (fn [x y] (+ x y))
+        _  (is (re-matches #"#fn clojure\+\.print-test/fn--\d+/f1--\d+" (pr-str f1)))
+
+        f2 (fn abc [x y] (+ x y))
+        _  (is (re-matches #"#fn clojure\+\.print-test/fn--\d+/abc--\d+" (pr-str f2)))
+
+        _  (is (= "#fn clojure.core/+" (pr-str +)))
+        f3 (read-string "#fn clojure.core/+")
+        _  (is (= 3 (f3 1 2)))]))
+
+(deftest multifn-test
+  (is (= "#multifn print-method" (pr-str print-method))))
 
 (deftest ns-test
   (let [ns  (find-ns 'clojure+.print-test)
@@ -554,3 +591,9 @@
         _  (is (= 1 @(AtomicReferenceArray/.get a' 0)))
         _  (is (= 2 @(AtomicReferenceArray/.get a' 1)))
         _  (is (= 3 @(AtomicReferenceArray/.get a' 2)))]))
+
+(deftest pprint-test
+  (let [a [(atom 42) (io/file "/") (int-array [1 2 3])]
+        _ (is (= "[#atom 42 #file \"/\" #ints [1 2 3]]\n"
+                (with-out-str
+                  (pprint/pprint a))))]))

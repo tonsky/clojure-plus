@@ -1,8 +1,9 @@
 (ns clojure+.print
   (:require
+   [clojure.pprint :as pprint]
    [clojure.string :as str])
   (:import
-   [clojure.lang Atom Agent ATransientSet Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue Ref PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Volatile]
+   [clojure.lang AFunction Agent Atom ATransientSet Compiler Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue  PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Volatile]
    [java.io File Writer]
    [java.lang.ref SoftReference WeakReference]
    [java.lang.reflect Field]
@@ -11,6 +12,7 @@
    [java.nio.file Path]
    [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
    [java.time.temporal ChronoUnit]
+   [java.util List]
    [java.util.concurrent Future TimeUnit]
    [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
 
@@ -65,7 +67,8 @@
 (defmacro prefer [a b]
   `(do
      (prefer-method print-method ~a ~b)
-     (prefer-method print-dup ~a ~b)))
+     (prefer-method print-dup ~a ~b)
+     (prefer-method pprint/simple-dispatch ~a ~b)))
 
 
 ;; arrays
@@ -172,6 +175,7 @@
 (swap! *catalogue conj {:class Agent    :print (make-print-ref 'agent)    :tag 'agent    :read #'agent})
 (swap! *catalogue conj {:class Ref      :print (make-print-ref 'ref)      :tag 'ref      :read #'ref})
 (swap! *catalogue conj {:class Volatile :print (make-print-ref 'volatile) :tag 'volatile :read #'volatile!})
+(swap! *catalogue conj {:class Reduced  :print (make-print-ref 'reduced)  :tag 'reduced  :read #'reduced})
 
 
 (defn print-promise [^IPending ref ^Writer w]
@@ -187,6 +191,7 @@
 
 (prefer IPending IDeref)
 (prefer ISeq IPending)
+(prefer List IPending)
 (swap! *catalogue conj {:class IPending :print print-promise :tag 'promise :read #'read-promise})
 
 
@@ -220,6 +225,33 @@
 (prefer Future IPending)
 (prefer Future IDeref)
 (swap! *catalogue conj {:class Future :print print-future :tag 'future :read #'read-future})
+
+
+;; #function
+
+(defn print-fn [^AFunction f ^Writer w]
+  (.write w "#fn ")
+  (.write w (-> f class .getName Compiler/demunge)))
+
+(defn read-fn [sym]
+  (let [cls  (-> sym str (str/split #"/") (->> (map Compiler/munge) (str/join "$") Class/forName))
+        ctor (.getDeclaredConstructor cls (make-array Class 0))]
+    (if ctor
+      (.newInstance ctor (make-array Object 0))
+      (throw (ex-info "Can't read closures" {})))))
+
+(swap! *catalogue conj {:class AFunction :print print-fn :tag 'fn :read #'read-fn})
+
+
+(def ^:private ^Field multifn-name-field
+  (doto (.getDeclaredField MultiFn "name")
+    (.setAccessible true)))
+
+(defn print-multifn [^MultiFn f ^Writer w]
+  (.write w "#multifn ")
+  (.write w ^String (.get multifn-name-field f)))
+
+(swap! *catalogue conj {:class MultiFn :print print-multifn :tag 'multifn})
 
 
 ;; #ns
@@ -455,7 +487,8 @@
    (let [catalogue (catalogue opts)]
      (doseq [{:keys [class print]} catalogue]
        (MultiFn/.addMethod print-method class print)
-       (MultiFn/.addMethod print-dup class print)))))
+       (MultiFn/.addMethod print-dup class print)
+       (MultiFn/.addMethod pprint/simple-dispatch class #(print % *out*))))))
 
 (defn data-readers
   "List of all readers this library can install. Returns map of {symbol -> var}

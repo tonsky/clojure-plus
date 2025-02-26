@@ -7,7 +7,7 @@ A collection of utilities that improve Clojure experience.
 Add this to deps.edn:
 
 ```clojure
-io.github.tonsky/clojure-plus {:mvn/version "1.0.1"}
+io.github.tonsky/clojure-plus {:mvn/version "1.1.0"}
 ```
 
 ## clojure+.core
@@ -201,7 +201,15 @@ You can pass `:include`/`:exclude` options or choose to intall only readers or o
 
 Note: this representation doesn't track identity. So printing `atom` and reading it back will produce a new object instance. Same goes for arrays, transients etc.
 
-Full list of supported types:
+### Is it safe?
+
+Technically, reader tags with no namespace are reserved by Clojure. I see two possible uses:
+
+1. Use them during development only. Install printers in `user.clj` and see your data clearly during REPL evaluations and debug output. That alone will get you 90% of the benefits already. Aestethics matters.
+
+2. Fully commit and use reader tags while writing code. Potentially, new version of Clojure might introduce conflicting tags, so be aware of that. Maybe don’t do it in a library (something people might reuse), but in your own project? Why not? If Clojure breaks compatibility in the future, you can always clean it up and keep going.
+
+### What types are supported?
 
 Arrays:
 
@@ -227,6 +235,7 @@ Atom                  #atom 123
 Agent                 #agent 123
 Ref                   #ref 123
 Volatile              #volatile 123
+Reduced               #reduced 123
 Promise               #promise <pending...>
                       #promise 123
 Delay                 #delay <pending...>
@@ -252,7 +261,14 @@ Transients            #transient [1 2 3]
                       #transient {:a 1 :b 2}
                       #transient #{:a :b :c}
 ```
-             
+
+Functions:
+
+```
+AFunction             #fn clojure.core/+
+                      #fn clojure+.print/fn--25647/f1--25648
+MultiFn               #multifn print-method
+```
 
 java.time:
 
