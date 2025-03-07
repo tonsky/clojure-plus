@@ -133,7 +133,7 @@ But 1.7 made it too noisy:
 => (atom 123)
 #object[clojure.lang.Atom 0x23c650a3 {:status :ready, :val 123}]
 
-user=> (io/file "/")
+=> (io/file "/")
 #object[java.io.File 0x7d2a6eac "/"]
 
 => *ns*
