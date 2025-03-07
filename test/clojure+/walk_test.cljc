@@ -1,7 +1,7 @@
 (ns clojure+.walk-test
   (:require
    [clojure+.walk :as walk]
-   [clojure.test :refer [is are deftest]]))
+   [clojure.test :refer [is are deftest testing]]))
 
 (defn bump [form]
   (if (number? form)
@@ -33,14 +33,35 @@
     {:a {:b {:c {:d [1 2 {:e 3}]}}}}
     {:a {:b {:c {:d [2 3 {:e 4}]}}}}))
 
+(deftest test-list
+  (are [before after] (= after (walk/postwalk bump before))
+
+    (list 1 2 3 :a "b" nil 4 5 6)
+    (list 2 3 4 :a "b" nil 5 6 7)
+
+    '[(or (like ?t ?pat1) (like ?t ?pat2))]
+    '[(or (like ?t ?pat1) (like ?t ?pat2))])
+
+  (testing "There is no LazySeq in result"
+    (let [lazy? (atom false)
+          res   (walk/postwalk
+                  #(do (when (instance? clojure.lang.IPending %)
+                         (reset! lazy? true))
+                       %)
+                  (walk/postwalk-replace
+                    {'?pat1 "A" '?pat2 "B"}
+                    '[(or (like ?t ?pat1) (like ?t ?pat2))]))]
+      (is (not @lazy?))
+      (is (= res '[(or (like ?t "A") (like ?t "B"))])))))
+
 (deftest test-skip
   (is (= {:a 1, :c 3}
-        (walk/postwalk
-          (fn [form]
-            (if (and (map-entry? form) (= :b (first form)))
-              nil
-              form))
-          {:a 1, :b 2, :c 3}))))
+         (walk/postwalk
+           (fn [form]
+             (if (and (map-entry? form) (= :b (first form)))
+               nil
+               form))
+           {:a 1, :b 2, :c 3}))))
 
 (deftest test-identity
   (are [form] (let [form' form]
