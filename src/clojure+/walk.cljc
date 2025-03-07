@@ -104,6 +104,21 @@
       (with-meta (meta form))
       (outer))
 
+    (list? form)
+    (outer
+      (let [res (reduce
+                  (fn [idx el]
+                    (let [el' (inner el)]
+                      (if (identical? el' el)
+                        (inc idx)
+                        (let [[left right] (split-at idx form)]
+                          (reduced
+                            (concat left [el'] (map inner (next right))))))))
+                  0 form)]
+        (if (number? res)
+          form
+          (with-meta (apply list res) (meta form)))))
+
     #?(:clj (instance? clojure.lang.IRecord form)
        :cljs (record? form))
     (outer
