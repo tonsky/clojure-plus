@@ -312,6 +312,181 @@ Ideas to what else would be convenient to print are welcome!
 
 This namespace was inspired by Ivan Grishaev’s [taggie](https://github.com/igrishaev/taggie).
 
+## clojure+.error
+
+Clojure exception printer is hard to look at:
+
+```clojure
+user=> (println (Exception. "Oops"))
+#error {
+ :cause Oops
+ :via
+ [{:type java.lang.Exception
+   :message Oops
+   :at [user$eval3 invokeStatic NO_SOURCE_FILE 1]}]
+ :trace
+ [[user$eval3 invokeStatic NO_SOURCE_FILE 1]
+  [user$eval3 invoke NO_SOURCE_FILE 1]
+  [clojure.lang.Compiler eval Compiler.java 7700]
+  [clojure.lang.Compiler eval Compiler.java 7655]
+  [clojure.core$eval invokeStatic core.clj 3232]
+  [clojure.core$eval invoke core.clj 3228]
+  [clojure.main$repl$read_eval_print__9244$fn__9247 invoke main.clj 437]
+  [clojure.main$repl$read_eval_print__9244 invoke main.clj 437]
+  [clojure.main$repl$fn__9253 invoke main.clj 459]
+  [clojure.main$repl invokeStatic main.clj 459]
+  [clojure.main$repl_opt invokeStatic main.clj 523]
+  [clojure.main$main invokeStatic main.clj 668]
+  [clojure.main$main doInvoke main.clj 617]
+  [clojure.lang.RestFn invoke RestFn.java 400]
+  [clojure.lang.AFn applyToHelper AFn.java 152]
+  [clojure.lang.RestFn applyTo RestFn.java 135]
+  [clojure.lang.Var applyTo Var.java 707]
+  [clojure.main main main.java 40]]}
+```
+
+And I mean it in a literal sense: information is hard to parse, it’s not easy to find what you are looking for, labels don’t make sense. Why is message repeated twice? Why is it called `:cause` first time and `:message` second time? What are `:via` and `:at`? Why is it nested like this?
+
+Compare to Java:
+
+```clojure
+user=> (.printStackTrace (Exception. "Oops"))
+java.lang.Exception: Oops
+        at user$eval5.invokeStatic(NO_SOURCE_FILE:1)
+        at user$eval5.invoke(NO_SOURCE_FILE:1)
+        at clojure.lang.Compiler.eval(Compiler.java:7700)
+        at clojure.lang.Compiler.eval(Compiler.java:7655)
+        at clojure.core$eval.invokeStatic(core.clj:3232)
+        at clojure.core$eval.invoke(core.clj:3228)
+        at clojure.main$repl$read_eval_print__9244$fn__9247.invoke(main.clj:437)
+        at clojure.main$repl$read_eval_print__9244.invoke(main.clj:437)
+        at clojure.main$repl$fn__9253.invoke(main.clj:459)
+        at clojure.main$repl.invokeStatic(main.clj:459)
+        at clojure.main$repl_opt.invokeStatic(main.clj:523)
+        at clojure.main$main.invokeStatic(main.clj:668)
+        at clojure.main$main.doInvoke(main.clj:617)
+        at clojure.lang.RestFn.invoke(RestFn.java:400)
+        at clojure.lang.AFn.applyToHelper(AFn.java:152)
+        at clojure.lang.RestFn.applyTo(RestFn.java:135)
+        at clojure.lang.Var.applyTo(Var.java:707)
+        at clojure.main.main(main.java:40)
+```
+
+Much cleaner! I often call `.printStackTrace` on exceptions just to understand what’s going on.
+
+My second problem is that Clojure exception printer doesn’t know about Clojure. Why do I see `clojure.main$repl_opt invokeStatic` when what I wrote in code is `(clojure.main/repl-opt)`?
+
+Clojure+ solves all these problems! Here’s how _the same_ exception looks in Clojure+:
+
+```clojure
+user=> (println (Exception. "Oops"))
+Exception: Oops
+  user/eval
+  Compiler.eval                         Compiler.java 7700
+  Compiler.eval                         Compiler.java 7655
+  clojure.core/eval                     core.clj 3232
+  clojure.main/repl/read-eval-print/fn  main.clj 437
+  clojure.main/repl/read-eval-print     main.clj 437
+  clojure.main/repl/fn                  main.clj 459
+  clojure.main/repl                     main.clj 459
+  clojure.main/repl-opt                 main.clj 523
+  clojure.main/main                     main.clj 668
+  Var.applyTo                           Var.java 707
+  main.main                             main.java 40
+```
+
+I just want to highlight: this is exactly the same stacktrace, but cleaned up and formatted better. It is Clojure-aware: stack trace elements that are clearly coming from Clojure are decoded back to familiar form.
+
+There’re couple more tricks. For those of us with colored terminal, we can help you read output even better:
+
+<img src="./extras/error.webp" width=500 height=325>
+
+We can print readably:
+
+```clojure
+user=> (prn (Exception. "Oops"))
+
+#error {
+ :class   java.lang.Exception
+ :message "Oops"
+ :trace
+ [[user/eval]
+  [Compiler.eval                         "Compiler.java" 7700]
+  [Compiler.eval                         "Compiler.java" 7655]
+  [clojure.core/eval                     "core.clj" 3232]
+  [clojure.main/repl/read-eval-print/fn  "main.clj" 437]
+  [clojure.main/repl/read-eval-print     "main.clj" 437]
+  [clojure.main/repl/fn                  "main.clj" 459]
+  [clojure.main/repl                     "main.clj" 459]
+  [clojure.main/repl-opt                 "main.clj" 523]
+  [clojure.main/main                     "main.clj" 668]
+  [Var.applyTo                           "Var.java" 707]
+  [main.main                             "main.java" 40]]}
+```
+
+The trick here is that you can be both _readable_ (in Clojure `(read)` sense) and still nicely formatted.
+
+Finally, for long exceptions, I always found it irritating that you need to scroll up to see message and where that error started. Well, no more: `clojure+.error` can reverse stack traces:
+
+```clojure
+user=> (clojure+.error/install! {:reverse? true})
+user=> (println (Exception. "Oops"))
+
+  main.main                             main.java 40
+  Var.applyTo                           Var.java 707
+  clojure.main/main                     main.clj 668
+  clojure.main/repl-opt                 main.clj 523
+  clojure.main/repl                     main.clj 459
+  clojure.main/repl/fn                  main.clj 459
+  clojure.main/repl/read-eval-print     main.clj 437
+  clojure.main/repl/read-eval-print/fn  main.clj 437
+  clojure.core/eval                     core.clj 3232
+  Compiler.eval                         Compiler.java 7655
+  Compiler.eval                         Compiler.java 7700
+  user/eval
+Exception: Oops
+```
+
+This way you always see what happened without need to scroll.
+
+Oh, and we support `ExceptionInfo`, that goes without saying:
+
+```clojure
+user=> (println (ex-info "Oops" {:a 1, :b 2}))
+
+  main.main                             main.java 40
+  Var.applyTo                           Var.java 707
+  clojure.main/main                     main.clj 668
+  clojure.main/repl-opt                 main.clj 523
+  clojure.main/repl                     main.clj 459
+  clojure.main/repl/fn                  main.clj 459
+  clojure.main/repl/read-eval-print     main.clj 437
+  clojure.main/repl/read-eval-print/fn  main.clj 437
+  clojure.core/eval                     core.clj 3232
+  Compiler.eval                         Compiler.java 7655
+  Compiler.eval                         Compiler.java 7700
+  user/eval
+ExceptionInfo: Oops {:a 1, :b 2}
+```
+
+Good news? All this is configurable! Here are the defaults:
+
+```clojure
+(clojure+.error/install!
+  {:clean?           true
+   :collapse-common? true
+   :color?           true
+   :reverse?         false
+   :root-cause-only? false
+   :indent           2})
+```
+
+And if you don’t like it, you can always restore the default printer:
+
+```clojure
+(clojure+.error/uninstall!)
+```
+
 ## clojure+.walk
 
 A drop-in replacement for `clojure.walk` that does not recreate data structures if they didn’t change (result of transform funcion is `identical?`)
