@@ -16,7 +16,6 @@
    (defn ^boolean transient? [coll]
      (implements? cljs.core.ITransientCollection coll)))
 
-
 (defn map-entry [k v]
   #?(:clj  (clojure.lang.MapEntry. k v)
      :cljs (cljs.core.MapEntry. k v nil)))
@@ -128,7 +127,10 @@
                   0 form)]
         (if (number? res)
           form
-          (with-meta (doall res) (meta form)))))
+          (-> (if (list? form)
+                (apply list res)
+                (doall res))
+            (with-meta (meta form))))))
 
     (coll? form)
     (outer

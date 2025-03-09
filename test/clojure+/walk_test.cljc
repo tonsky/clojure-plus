@@ -112,6 +112,12 @@
         f (fn [e] (if (and (vector? e) (not (map-entry? e))) (apply list e) e))]
     (is (= (list :html {:a (list "b" 1)} "") (walk/postwalk f coll)))))
 
+;; issue-2 issue-3
+(deftest list-test
+  (let [list' (walk/postwalk bump (list 1 2 3 :a "b" nil 4 5 6))]
+    (is (= (list 2 3 4 :a "b" nil 5 6 7) list'))
+    (is (list? list'))))
+
 (defrecord RM [a])
 
 (deftest retain-meta
