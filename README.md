@@ -481,6 +481,10 @@ Good news? All this is configurable! Here are the defaults:
    :indent           2})
 ```
 
+Comparison with [pretty](https://github.com/clj-commons/pretty):
+
+<img src="./extras/error_comparison.webp" width=830 height=1060>
+
 And if you don’t like it, you can always restore the default printer:
 
 ```clojure
