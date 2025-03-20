@@ -8,28 +8,34 @@
    [java.io ByteArrayOutputStream PrintStream OutputStreamWriter]
    [java.util.regex Pattern]))
 
-(def system-out
+(def ^:private system-out
   System/out)
 
-(def system-err
+(def ^:private system-err
   System/err)
 
-(def out
+(def ^:private out
   *out*)
 
-(def *buffer
+(def ^:private *buffer
   (atom nil))
 
-(def *time-ns
+(def ^:private *time-ns
   (atom nil))
 
-(def *time-total
+(def ^:private *time-total
   (atom nil))
 
-(def *has-output?
+(def ^:private *has-output?
   (atom false))
 
-(defn capture-output []
+(defn- default-config []
+  {:capture-output? true})
+
+(def config
+  (default-config))
+
+(defn- capture-output []
   (let [buffer (ByteArrayOutputStream.)
         _      (reset! *buffer buffer)
         ps     (PrintStream. buffer)
@@ -39,45 +45,50 @@
     (push-thread-bindings {#'*out* out
                            #'*err* out})))
 
-(defn restore-output []
+(defn- restore-output []
   (System/setOut system-out)
   (System/setErr system-err)
   (pop-thread-bindings))
 
-(defn reprint-output []
+(defn- reprint-output []
   (print (str @*buffer))
   (flush))
 
-(defn report-begin-test-ns [m]
+(defn- report-begin-test-ns [m]
   (reset! *time-ns (System/currentTimeMillis))
   (compare-and-set! *time-total nil (System/currentTimeMillis))
   (reset! *has-output? false)
   (test/with-test-out
     (when (and (:idx m) (:count m))
       (print (str (inc (:idx m)) "/" (:count m) " ")))
-    (print (str "Testing " (ns-name (:ns m)) "..."))
-    (flush)))
+    (print (str "Testing " (ns-name (:ns m))))
+    (if (:capture-output? config)
+      (do (print "..." (flush)))
+      (println))))
 
-(defn report-end-test-ns [m]
+(defn- report-end-test-ns [m]
   (test/with-test-out
-    (if @*has-output?
-      (println "Finished" (ns-name (:ns m)) "in" (- (System/currentTimeMillis) @*time-ns) "ms")
-      (println "" (- (System/currentTimeMillis) @*time-ns) "ms"))))
+    (when (:capture-output? config)
+      (if @*has-output?
+        (println "Finished" (ns-name (:ns m)) "in" (- (System/currentTimeMillis) @*time-ns) "ms")
+        (println "" (- (System/currentTimeMillis) @*time-ns) "ms")))))
 
 (defn report-begin-test-var [m]
-  (capture-output))
+  (when (:capture-output? config)
+    (capture-output)))
 
-(defn report-end-test-var [m]
-  (restore-output))
+(defn- report-end-test-var [m]
+  (when (:capture-output? config)
+    (restore-output)))
 
-(defn testing-vars-str [m]
+(defn- testing-vars-str [m]
   (let [{:keys [file line]} m
         vars (reverse test/*testing-vars*)
         var  (first test/*testing-vars*)
         ns   (:ns (meta var))]
     (str ns "/" (str/join " " (map #(:name (meta %)) vars)) " (" file ":" line ")")))
 
-(defn print-testing-contexts []
+(defn- print-testing-contexts []
   (loop [[tc & tcs] (reverse test/*testing-contexts*)
          indent     ""]
     (if tc
@@ -86,17 +97,18 @@
         (recur tcs (str indent "  ")))
       indent)))
 
-(defn report-pass [m]
+(defn- report-pass [m]
   (test/with-test-out
     (test/inc-report-counter :pass)))
 
-(defn report-fail [m]
+(defn- report-fail [m]
   (test/with-test-out
     (test/inc-report-counter :fail)
     (when-not @*has-output?
       (println)
       (reset! *has-output? true))
-    (reprint-output)
+    (when (:capture-output? config)
+      (reprint-output))
     (println "FAIL in" (testing-vars-str m))
     (let [indent (print-testing-contexts)]
       (when-some [message (:message m)]
@@ -106,19 +118,20 @@
       (println (str indent "├╴expected:") (pr-str (:expected m)))
       (println (str indent "└╴actual:  ") (pr-str (:actual m))))))
 
-(defn trace-transform [trace]
+(defn- trace-transform [trace]
   (take-while
     (fn [{:keys [ns method file]}]
       (not= ["clojure.test" "test-var/fn" "test.clj"] [ns method file]))
     trace))
 
-(defn report-error [m]
+(defn- report-error [m]
   (test/with-test-out
     (test/inc-report-counter :error)
     (when-not @*has-output?
       (println)
       (reset! *has-output? true))
-    (reprint-output)
+    (when (:capture-output? config)
+      (reprint-output))
     (println "ERROR in" (testing-vars-str m))
     (let [indent (print-testing-contexts)]
       (if (and (= "Uncaught exception, not in assertion." (:message m)) (nil? (:expected m)))
@@ -133,7 +146,7 @@
             (println (str indent "└╴actual:"))
             (println (:actual m))))))))
 
-(defn report-summary [m]
+(defn- report-summary [m]
   (test/with-test-out
     (println "╶───╴")
     (println "Ran" (:test m) "tests containing"
@@ -142,7 +155,7 @@
     (println (:fail m) "failures," (:error m) "errors.")
     (reset! *time-total nil)))
 
-(defn assert-expr-= [msg form]
+(defn- assert-expr-= [msg form]
   (if (= 3 (count form))
     `(let [expected# ~(nth form 1)
            actual#   ~(nth form 2)
@@ -155,7 +168,7 @@
        result#)
     (test/assert-predicate msg form)))
 
-(defn assert-expr-not= [msg form]
+(defn- assert-expr-not= [msg form]
   (if (= 3 (count form))
     `(let [expected# ~(nth form 1)
            actual#   ~(nth form 2)
@@ -168,7 +181,7 @@
        result#)
     (test/assert-predicate msg form)))
 
-(def patched-methods-report
+(def ^:private patched-methods-report
   {:begin-test-ns  #'report-begin-test-ns
    :end-test-ns    #'report-end-test-ns
    :begin-test-var #'report-begin-test-var
@@ -178,16 +191,20 @@
    :error          #'report-error
    :summary        #'report-summary})
 
-(def clojure-methods-report
+(def ^:private clojure-methods-report
   (into {}
     (for [[k _] patched-methods-report]
       [k (get-method test/report k)])))
 
-(defn install! []
-  (doseq [[k m] patched-methods-report]
-    (MultiFn/.addMethod test/report k @m))
-  (MultiFn/.addMethod test/assert-expr '= assert-expr-=)
-  (MultiFn/.addMethod test/assert-expr 'not= assert-expr-not=))
+(defn install!
+  ([]
+   (install! {}))
+  ([opts]
+   (.doReset #'config (merge (default-config) opts))
+   (doseq [[k m] patched-methods-report]
+     (MultiFn/.addMethod test/report k @m))
+   (MultiFn/.addMethod test/assert-expr '= assert-expr-=)
+   (MultiFn/.addMethod test/assert-expr 'not= assert-expr-not=)))
 
 (defn uninstall! []
   (doseq [[k m] clojure-methods-report]
