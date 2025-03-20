@@ -3,8 +3,9 @@
    [clojure.string :as str]
    [clojure.test :as test])
   (:import
-   [clojure.lang MultiFn]
-   [java.io ByteArrayOutputStream PrintStream OutputStreamWriter]))
+   [clojure.lang MultiFn Namespace Var]
+   [java.io ByteArrayOutputStream PrintStream OutputStreamWriter]
+   [java.util.regex Pattern]))
 
 (def system-out
   System/out)
@@ -51,6 +52,8 @@
   (compare-and-set! *time-total nil (System/currentTimeMillis))
   (reset! *has-output? false)
   (test/with-test-out
+    (when (and (:idx m) (:count m))
+      (print (str (inc (:idx m)) "/" (:count m) " ")))
     (print (str "Testing " (ns-name (:ns m)) "..."))
     (flush)))
 
@@ -181,3 +184,44 @@
     (MultiFn/.addMethod test/report k m))
   (MultiFn/.removeMethod test/assert-expr '=)
   (MultiFn/.removeMethod test/assert-expr 'not=))
+
+(defn run [& args]
+  (let [vars (for [arg       (if (empty? args) (all-ns) args)
+                   var-or-ns (cond
+                               (symbol? arg)
+                               [(or
+                                  (resolve arg)
+                                  (the-ns arg)
+                                  (throw (ex-info (str "Can’t resolve symbol " arg) {:symbol arg})))]
+                                
+                               (instance? Namespace arg)
+                               [arg]
+                                
+                               (instance? Var arg)
+                               [arg]
+                                
+                               (instance? Pattern arg)
+                               (filter #(re-matches arg (name (ns-name %))) (all-ns)))
+                   var (if (instance? Namespace var-or-ns)
+                         (vals (ns-interns var-or-ns))
+                         [var-or-ns])
+                   :when (:test (meta var))]
+               var)
+        ns+vars (->> vars
+                  (group-by #(:ns (meta %)))
+                  (sort-by (fn [[ns _]] (name (ns-name ns)))))]
+    (binding [test/*report-counters* (ref test/*initial-report-counters*)]
+      (doseq [[idx [ns vars]] (map vector (range) ns+vars)]
+        (test/do-report {:type :begin-test-ns, :ns ns, :idx idx, :count (count ns+vars)})
+        (let [once-fixture-fn (test/join-fixtures (::once-fixtures (meta ns)))
+              each-fixture-fn (test/join-fixtures (::each-fixtures (meta ns)))]
+          (once-fixture-fn
+            (fn []
+              (doseq [v (->> vars
+                          (sort-by #(name (:name (meta %)))))]
+                (each-fixture-fn
+                  (fn []
+                    (test/test-var v)))))))
+        (test/do-report {:type :end-test-ns, :ns ns, :idx idx, :count (count ns+vars)}))
+      (test/do-report (assoc @test/*report-counters* :type :summary))
+      @test/*report-counters*)))
