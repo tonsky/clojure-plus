@@ -1,5 +1,6 @@
 (ns clojure+.test
   (:require
+   [clojure.string :as str]
    [clojure.test :as test])
   (:import
    [clojure.lang MultiFn]
@@ -16,6 +17,15 @@
 
 (def *buffer
   (atom nil))
+
+(def *time-ns
+  (atom nil))
+
+(def *time-total
+  (atom nil))
+
+(def *has-output?
+  (atom false))
 
 (defn capture-output []
   (let [buffer (ByteArrayOutputStream.)
@@ -37,14 +47,40 @@
   (flush))
 
 (defn report-begin-test-ns [m]
+  (reset! *time-ns (System/currentTimeMillis))
+  (compare-and-set! *time-total nil (System/currentTimeMillis))
+  (reset! *has-output? false)
   (test/with-test-out
-    (println "Testing" (ns-name (:ns m)))))
+    (print (str "Testing " (ns-name (:ns m)) "..."))
+    (flush)))
+
+(defn report-end-test-ns [m]
+  (test/with-test-out
+    (if @*has-output?
+      (println "Finished" (ns-name (:ns m)) "in" (- (System/currentTimeMillis) @*time-ns) "ms")
+      (println "" (- (System/currentTimeMillis) @*time-ns) "ms"))))
 
 (defn report-begin-test-var [m]
   (capture-output))
 
 (defn report-end-test-var [m]
   (restore-output))
+
+(defn testing-vars-str [m]
+  (let [{:keys [file line]} m
+        vars (reverse test/*testing-vars*)
+        var  (first test/*testing-vars*)
+        ns   (:ns (meta var))]
+    (str ns "/" (str/join " " (map #(:name (meta %)) vars)) " (" file ":" line ")")))
+
+(defn print-testing-contexts []
+  (loop [[tc & tcs] (reverse test/*testing-contexts*)
+         indent     ""]
+    (if tc
+      (do
+        (println (str indent "└╴" tc))
+        (recur tcs (str indent "  ")))
+      indent)))
 
 (defn report-pass [m]
   (test/with-test-out
@@ -53,48 +89,95 @@
 (defn report-fail [m]
   (test/with-test-out
     (test/inc-report-counter :fail)
+    (when-not @*has-output?
+      (println)
+      (reset! *has-output? true))
     (reprint-output)
-    (println "FAIL in" (test/testing-vars-str m))
-    (when (seq test/*testing-contexts*)
-      (println (test/testing-contexts-str)))
-    (when-some [message (:message m)]
-      (println message))
-    (println "expected:" (pr-str (:expected m)))
-    (println "  actual:" (pr-str (:actual m)))))
+    (println "FAIL in" (testing-vars-str m))
+    (let [indent (print-testing-contexts)]
+      (when-some [message (:message m)]
+        (println (str indent "├╴message: ") message))
+      (when-some [form (:form m)]
+        (println (str indent "├╴form:    ") (pr-str form)))
+      (println (str indent "├╴expected:") (pr-str (:expected m)))
+      (println (str indent "└╴actual:  ") (pr-str (:actual m))))))
 
 (defn report-error [m]
   (test/with-test-out
     (test/inc-report-counter :error)
+    (when-not @*has-output?
+      (println)
+      (reset! *has-output? true))
     (reprint-output)
-    (println "ERROR in" (test/testing-vars-str m))
-    (when (seq test/*testing-contexts*)
-      (println (test/testing-contexts-str)))
-    (when-some [message (:message m)]
-      (println message))
-    (println "expected:" (pr-str (:expected m)))
-    (print "  actual: ")
-    (let [actual (:actual m)]
-      (if (instance? Throwable actual)
-        (println actual)
-        (prn actual)))))
+    (println "ERROR in" (testing-vars-str m))
+    (let [indent (print-testing-contexts)]
+      (when-some [message (:message m)]
+        (println (str indent "├╴message: ") message))
+      (when-not
+        (and
+          (= "Uncaught exception, not in assertion." (:message m))
+          (nil? (:expected m)))
+        (println (str indent "├╴expected:") (pr-str (:expected m))))
+      (println (str indent "└╴actual:  ") (:actual m)))))
 
-(def patched-methods
-  {:begin-test-ns  report-begin-test-ns
-   :begin-test-var report-begin-test-var
-   :end-test-var   report-end-test-var
-   :pass           report-pass
-   :fail           report-fail
-   :error          report-error})
+(defn report-summary [m]
+  (test/with-test-out
+    (println "╶───╴")
+    (println "Ran" (:test m) "tests containing"
+      (+ (:pass m) (:fail m) (:error m)) "assertions"
+      "in" (- (System/currentTimeMillis) @*time-total) "ms.")
+    (println (:fail m) "failures," (:error m) "errors.")
+    (reset! *time-total nil)))
 
-(def clojure-methods
+(defn assert-expr-= [msg form]
+  (if (= 3 (count form))
+    `(let [expected# ~(nth form 1)
+           actual#   ~(nth form 2)
+           result#   (= expected# actual#)]
+       (test/do-report {:type     (if result# :pass :fail)
+                        :message  ~msg
+                        :form     '~form
+                        :expected expected#
+                        :actual   actual#})
+       result#)
+    (test/assert-predicate msg form)))
+
+(defn assert-expr-not= [msg form]
+  (if (= 3 (count form))
+    `(let [expected# ~(nth form 1)
+           actual#   ~(nth form 2)
+           result#   (not= expected# actual#)]
+       (test/do-report {:type     (if result# :pass :fail)
+                        :message  ~msg
+                        :form     '~form
+                        :expected expected#
+                        :actual   actual#})
+       result#)
+    (test/assert-predicate msg form)))
+
+(def patched-methods-report
+  {:begin-test-ns  #'report-begin-test-ns
+   :end-test-ns    #'report-end-test-ns
+   :begin-test-var #'report-begin-test-var
+   :end-test-var   #'report-end-test-var
+   :pass           #'report-pass
+   :fail           #'report-fail
+   :error          #'report-error
+   :summary        #'report-summary})
+
+(def clojure-methods-report
   (into {}
-    (for [[k _] patched-methods]
+    (for [[k _] patched-methods-report]
       [k (get-method test/report k)])))
 
 (defn install! []
-  (doseq [[k m] patched-methods]
-    (MultiFn/.addMethod test/report k m)))
+  (doseq [[k m] patched-methods-report]
+    (MultiFn/.addMethod test/report k @m))
+  (MultiFn/.addMethod test/assert-expr '= assert-expr-=)
+  (MultiFn/.addMethod test/assert-expr 'not= assert-expr-not=))
 
 (defn uninstall! []
-  (doseq [[k m] clojure-methods]
-    (MultiFn/.addMethod test/report k m)))
+  (doseq [[k m] clojure-methods-report]
+    (MultiFn/.addMethod test/report k m))
+  (MultiFn/.removeMethod test/assert-expr '=)
+  (MultiFn/.removeMethod test/assert-expr 'not=))
