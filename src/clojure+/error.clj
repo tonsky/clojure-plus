@@ -29,11 +29,15 @@
 
 (defn- default-config []
   {:clean?           true
+   :trace-transform  nil
    :collapse-common? true
    :color?           (color?)
    :reverse?         false
    :root-cause-only? false
    :indent           2})
+
+(def ^:dynamic *trace-transform*
+  nil)
 
 (def config
   (default-config))
@@ -80,7 +84,8 @@
           
           :else
           [(Compiler/demunge cls) "/" (Compiler/demunge method)])]
-    {:file      (if (= "NO_SOURCE_FILE" file) nil file)
+    {:element   el
+     :file      (if (= "NO_SOURCE_FILE" file) nil file)
      :line      line
      :ns        ns
      :separator separator
@@ -88,9 +93,11 @@
 
 (defn- get-trace [^Throwable t]
   (cond->> (.getStackTrace t)
-    (:clean? config) (remove noise?)
-    (:clean? config) (clear-duplicates)
-    true             (mapv trace-element)))
+    (:clean? config)          (remove noise?)
+    (:clean? config)          (clear-duplicates)
+    true                      (mapv trace-element)
+    (:trace-transform config) ((:trace-transform config))
+    *trace-transform*         (*trace-transform*)))
 
 (defn datafy-throwable [^Throwable t]
   (let [trace  (get-trace t)
@@ -395,7 +402,10 @@
                                  to be more clojure-like. True by default.
      :collapse-common? <bool> :: With chained exceptions, skips common part of
                                  stack traces. True by default.
-     :color?           <bool> :: Whether to use color output. True by default.
+     :trace-transform  <fn>   :: A fn accepting and returning trace--a sequence
+                                 of maps {:keys [element file line ns method]}
+                                 where element is original StackTraceElement.
+     :color?           <bool> :: Whether to use color output. Autodetect by default.
      :reverse?         <bool> :: Whether to print stack trace and cause chain
                                  inner-to-outer (Java default) or outer-to-inner.
                                  Useful for REPL and small terminals as class,

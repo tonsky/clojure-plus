@@ -1,7 +1,8 @@
 (ns clojure+.test
   (:require
    [clojure.string :as str]
-   [clojure.test :as test])
+   [clojure.test :as test]
+   [clojure+.error :as error])
   (:import
    [clojure.lang MultiFn Namespace Var]
    [java.io ByteArrayOutputStream PrintStream OutputStreamWriter]
@@ -105,6 +106,12 @@
       (println (str indent "├╴expected:") (pr-str (:expected m)))
       (println (str indent "└╴actual:  ") (pr-str (:actual m))))))
 
+(defn trace-transform [trace]
+  (take-while
+    (fn [{:keys [ns method file]}]
+      (not= ["clojure.test" "test-var/fn" "test.clj"] [ns method file]))
+    trace))
+
 (defn report-error [m]
   (test/with-test-out
     (test/inc-report-counter :error)
@@ -114,14 +121,17 @@
     (reprint-output)
     (println "ERROR in" (testing-vars-str m))
     (let [indent (print-testing-contexts)]
-      (when-some [message (:message m)]
-        (println (str indent "├╴message: ") message))
-      (when-not
-        (and
-          (= "Uncaught exception, not in assertion." (:message m))
-          (nil? (:expected m)))
-        (println (str indent "├╴expected:") (pr-str (:expected m))))
-      (println (str indent "└╴actual:  ") (:actual m)))))
+      (if (and (= "Uncaught exception, not in assertion." (:message m)) (nil? (:expected m)))
+        (binding [error/*trace-transform* trace-transform]
+          (println (str indent "└╴uncaught:"))
+          (println (:actual m)))
+        (do      
+          (when-some [message (:message m)]
+            (println (str indent "├╴message:") message))
+          (println (str indent "├╴expected:") (pr-str (:expected m)))
+          (binding [error/*trace-transform* trace-transform]
+            (println (str indent "└╴actual:"))
+            (println (:actual m))))))))
 
 (defn report-summary [m]
   (test/with-test-out

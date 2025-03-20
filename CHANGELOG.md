@@ -1,5 +1,9 @@
 # WIP
 
+`clojure+.error`:
+
+- Added `:trace-transform` option to config
+- Added `*trace-transform*` dynamic variable
 - Removed '\n' in front of non-reversed human-readable exceptions
 - Added 'Caused by: ' to all causes in human-readable exceptions
 - Removed grey color from file extensions (separates file name and line better)

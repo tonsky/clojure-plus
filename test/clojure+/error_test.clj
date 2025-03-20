@@ -41,10 +41,14 @@
 (.setStackTrace effect-2
   (.getStackTrace cause))
 
+(defn trace-transform [trace]
+  (remove #(= "ThreadPoolExecutor.java" (:file %)) trace))
+
 (deftest humanly-nothing-test
   (error/install! {:color?           false
                    :reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
@@ -69,6 +73,7 @@ Caused by: Exception: Cause
   (error/install! {:color?           true
                    :reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
@@ -93,6 +98,7 @@ Caused by: \033[31mException:\033[0m Cause
   (error/install! {:color?           false
                    :reverse?         true
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
@@ -118,6 +124,7 @@ ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}"
   (error/install! {:color?           false
                    :reverse?         false
                    :clean?           true
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
@@ -134,10 +141,34 @@ Caused by: Exception: Cause
   Thread.run                                 Thread.java 1575"
         (with-out-str (print effect)))))
 
+(deftest humanly-trace-transform-test
+  (error/install! {:color?           false
+                   :reverse?         false
+                   :clean?           false
+                   :trace-transform  trace-transform
+                   :collapse-common? false
+                   :root-cause-only? false
+                   :indent           2})
+  (is (= "ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+  user$eval10830.invokeStatic
+  user$eval10830.invoke
+  clojure.core$binding_conveyor_fn$fn__5842.invoke        core.clj 2047
+  clojure.lang.AFn.call                                   AFn.java 18
+  java.lang.Thread.run                                    Thread.java 1575
+Caused by: Exception: Cause
+  clojure_sublimed.core$track_vars_STAR_.invokeStatic
+  clojure_sublimed.core$track_vars_STAR_.invoke
+  clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
+  clojure.core$binding_conveyor_fn$fn__5842.invoke        core.clj 2047
+  clojure.lang.AFn.call                                   AFn.java 18
+  java.lang.Thread.run                                    Thread.java 1575"
+        (with-out-str (print effect)))))
+
 (deftest humanly-collapse-common-test
   (error/install! {:color?           false
                    :reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? true
                    :root-cause-only? false
                    :indent           2})
@@ -171,6 +202,7 @@ Caused by: Exception: Cause
   (error/install! {:color?           false
                    :reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? true
                    :indent           2})
@@ -187,6 +219,7 @@ Caused by: Exception: Cause
   (error/install! {:color?           false
                    :reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
@@ -204,6 +237,7 @@ Caused by: Exception: Cause
   (error/install! {:color?           false
                    :reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           4})
@@ -227,6 +261,7 @@ Caused by: Exception: Cause
   (error/install! {:color?           false
                    :reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           "\t"})
@@ -280,12 +315,12 @@ Caused by: \033[31mException:\033[0m Cause
   (error/install! {:color?           true
                    :reverse?         true
                    :clean?           true
+                   :trace-transform  trace-transform
                    :collapse-common? true
                    :root-cause-only? true
                    :indent           4})
   (is (= "
     \033[90mThread.\033[0mrun                                 Thread.java \033[90m1575\033[0m
-    \033[90mThreadPoolExecutor$Worker.\033[0mrun              ThreadPoolExecutor.java \033[90m642\033[0m
     \033[90mclojure.core/\033[0mbinding-conveyor-fn/fn        core.clj \033[90m2047\033[0m
     \033[90mclojure-sublimed.socket-repl/\033[0mfork-eval/fn
     \033[90mclojure-sublimed.core/\033[0mtrack-vars*
@@ -299,6 +334,7 @@ Caused by: \033[31mException:\033[0m Cause
 (deftest readably-nothing-test
   (error/install! {:reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false})
   (is (= "
@@ -330,6 +366,7 @@ Caused by: \033[31mException:\033[0m Cause
 (deftest readably-reverse-test
   (error/install! {:reverse?         true
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false})
   (is (= "
@@ -361,6 +398,7 @@ Caused by: \033[31mException:\033[0m Cause
 (deftest readably-clean-test
   (error/install! {:reverse?         false
                    :clean?           true
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? false})
   (is (= "
@@ -385,9 +423,40 @@ Caused by: \033[31mException:\033[0m Cause
    [Thread.run                                 \"Thread.java\" 1575]]}}"
         (with-out-str (pr effect)))))
 
+(deftest readably-trace-transform-test
+  (error/install! {:reverse?         false
+                   :clean?           false
+                   :trace-transform  trace-transform
+                   :collapse-common? false
+                   :root-cause-only? false})
+  (is (= "
+#error {
+ :class   clojure.lang.ExceptionInfo
+ :message \"Effect of \\\"Cause\\\"\"
+ :data    {:a 1, :b \"a \\\"string\\\"\"}
+ :trace
+ [[user$eval10830.invokeStatic]
+  [user$eval10830.invoke]
+  [clojure.core$binding_conveyor_fn$fn__5842.invoke         \"core.clj\" 2047]
+  [clojure.lang.AFn.call                                    \"AFn.java\" 18]
+  [java.lang.Thread.run                                     \"Thread.java\" 1575]]
+ :cause
+ #error {
+  :class   java.lang.Exception
+  :message \"Cause\"
+  :trace
+  [[clojure_sublimed.core$track_vars_STAR_.invokeStatic]
+   [clojure_sublimed.core$track_vars_STAR_.invoke]
+   [clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke]
+   [clojure.core$binding_conveyor_fn$fn__5842.invoke        \"core.clj\" 2047]
+   [clojure.lang.AFn.call                                   \"AFn.java\" 18]
+   [java.lang.Thread.run                                    \"Thread.java\" 1575]]}}"
+        (with-out-str (pr effect)))))
+
 (deftest readably-collapse-common-test
   (error/install! {:reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? true
                    :root-cause-only? false})
   (is (= "
@@ -437,6 +506,7 @@ Caused by: \033[31mException:\033[0m Cause
 (deftest readably-root-cause-only-test
   (error/install! {:reverse?         false
                    :clean?           false
+                   :trace-transform  nil
                    :collapse-common? false
                    :root-cause-only? true})
   (is (= "
@@ -492,6 +562,7 @@ Caused by: \033[31mException:\033[0m Cause
 (deftest readably-almost-everything-test
   (error/install! {:reverse?         true
                    :clean?           true
+                   :trace-transform  trace-transform
                    :collapse-common? true
                    :root-cause-only? false})
   (is (= "
@@ -500,14 +571,13 @@ Caused by: \033[31mException:\033[0m Cause
  #error {
   :trace
   [[Thread.run                                 \"Thread.java\" 1575]
-   [ThreadPoolExecutor$Worker.run              \"ThreadPoolExecutor.java\" 642]
    [clojure.core/binding-conveyor-fn/fn        \"core.clj\" 2047]
    [clojure-sublimed.socket-repl/fork-eval/fn]
    [clojure-sublimed.core/track-vars*]]
   :message \"Cause\"
   :class   java.lang.Exception}
  :trace
- [[...common-elements 3]
+ [[...common-elements 2]
   [user/eval]]
  :data    {:a 1, :b \"a \\\"string\\\"\"}
  :message \"Effect of \\\"Cause\\\"\"
@@ -517,13 +587,13 @@ Caused by: \033[31mException:\033[0m Cause
 (deftest readably-everything-test
   (error/install! {:reverse?         true
                    :clean?           true
+                   :trace-transform  trace-transform
                    :collapse-common? true
                    :root-cause-only? true})
   (is (= "
 #error {
  :trace
  [[Thread.run                                 \"Thread.java\" 1575]
-  [ThreadPoolExecutor$Worker.run              \"ThreadPoolExecutor.java\" 642]
   [clojure.core/binding-conveyor-fn/fn        \"core.clj\" 2047]
   [clojure-sublimed.socket-repl/fork-eval/fn]
   [clojure-sublimed.core/track-vars*]]
