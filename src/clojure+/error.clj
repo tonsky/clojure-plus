@@ -7,16 +7,36 @@
    [clojure.lang Compiler ExceptionInfo MultiFn]
    [java.io Writer]))
 
-(def ^:private default-config
+(defn- color? []
+  (cond
+    (System/getenv "NO_COLOR")
+    false
+
+    (= "true" (System/getProperty "clojure-plus.color"))
+    true
+
+    (System/getProperty "clojure-plus.color")
+    false
+
+    (find-ns 'nrepl.core)
+    true
+
+    (System/console)
+    true
+
+    :else
+    true))
+
+(defn- default-config []
   {:clean?           true
    :collapse-common? true
-   :color?           true
+   :color?           (color?)
    :reverse?         false
    :root-cause-only? false
    :indent           2})
 
 (def config
-  default-config)
+  (default-config))
 
 (defn- noise? [^StackTraceElement el]
   (let [class (.getClassName el)]
@@ -258,10 +278,10 @@
                   
                   (int? (:indent config))
                   (pad \space (:indent config)))]
-    (doseq [t ts
-            :let [{:keys [class message data trace common]} t]]      
+    (doseq [[idx t] (map vector (range) ts)
+            :let [{:keys [class message data trace common]} t]]
       ;; class
-      (write w "\n" (ansi-red) (Class/.getSimpleName class))
+      (write w (when (pos? idx) "\nCaused by: ") (ansi-red) (Class/.getSimpleName class))
       
       ;; message
       (if message
@@ -291,8 +311,7 @@
           (write w right-pad "  " (ansi-grey) "Native Method" (ansi-reset))
   
           file
-          (let [[name ext] (split-file file)]
-            (write w right-pad "  " name (ansi-grey) ext " " line (ansi-reset)))))
+          (write w right-pad "  " file " " (ansi-grey) line (ansi-reset))))
       
       ;; ... common elements
       (when (pos? common)
@@ -307,7 +326,7 @@
                   
                   (int? (:indent config))
                   (pad \space (:indent config)))]
-    (doseq [t (reverse ts)
+    (doseq [[idx t] (map vector (range) (reverse ts))
             :let [{:keys [class message data trace common]} t]]
       ;; ... common elements
       (when (pos? common)
@@ -328,11 +347,10 @@
           (write w right-pad "  " (ansi-grey) "Native Method" (ansi-reset))
   
           file
-          (let [[name ext] (split-file file)]
-            (write w right-pad "  " name (ansi-grey) ext " " line (ansi-reset)))))
+          (write w right-pad "  " file " " (ansi-grey) line (ansi-reset))))
       
       ;; class
-      (write w "\n" (ansi-red) (Class/.getSimpleName class))
+      (write w "\n" (when (< idx (dec (count ts))) "Caused by: ") (ansi-red) (Class/.getSimpleName class))
       
       ;; message
       (if message
@@ -390,10 +408,35 @@
   ([]
    (install! {}))
   ([opts]
-   (.doReset #'config (merge default-config opts))
+   (.doReset #'config (merge (default-config) opts))
    (MultiFn/.addMethod print-method Throwable patched-print-method)))
 
 (defn uninstall!
   "Restore default Clojure printer for Throwable"
   []
   (MultiFn/.addMethod print-method Throwable clojure-print-method))
+
+(comment
+  (install! {; :color? false
+             ; :root-cause-only? true
+             ; :clean? false
+             ; :collapse-common? false
+             ; :reverse? true
+             ; :indent 2
+             })
+
+  (defn ggg []
+    (throw (ex-info "abc" {:a 1 :b 2} (Throwable. "Cause!!!"))))
+
+  (defn fff []
+    (ggg))
+
+  (try
+    (fff)
+    (catch Throwable e
+      #_(prn e)
+      (println e)
+      nil))
+
+  (.printStackTrace (ex-info "abc" {:a 1 :b 2} (Throwable. "CAuse!!!")))
+  (println (ex-info "abc" {:a 1 :b 2} (Throwable. "CAuse!!!"))))

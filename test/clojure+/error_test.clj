@@ -48,15 +48,14 @@
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
-  (is (= "
-ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+  (is (= "ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
   user$eval10830.invokeStatic
   user$eval10830.invoke
   clojure.core$binding_conveyor_fn$fn__5842.invoke        core.clj 2047
   clojure.lang.AFn.call                                   AFn.java 18
   java.util.concurrent.ThreadPoolExecutor$Worker.run      ThreadPoolExecutor.java 642
   java.lang.Thread.run                                    Thread.java 1575
-Exception: Cause
+Caused by: Exception: Cause
   clojure_sublimed.core$track_vars_STAR_.invokeStatic
   clojure_sublimed.core$track_vars_STAR_.invoke
   clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
@@ -73,22 +72,21 @@ Exception: Cause
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
-  (is (= "
-\033[31mExceptionInfo:\033[0m Effect of \"Cause\" \033[90m{:a 1, :b a \"string\"}\033[0m
+  (is (= "\033[31mExceptionInfo:\033[0m Effect of \"Cause\" \033[90m{:a 1, :b a \"string\"}\033[0m
   \033[90muser$eval10830.\033[0minvokeStatic
   \033[90muser$eval10830.\033[0minvoke
-  \033[90mclojure.core$binding_conveyor_fn$fn__5842.\033[0minvoke        core\033[90m.clj 2047\033[0m
-  \033[90mclojure.lang.AFn.\033[0mcall                                   AFn\033[90m.java 18\033[0m
-  \033[90mjava.util.concurrent.ThreadPoolExecutor$Worker.\033[0mrun      ThreadPoolExecutor\033[90m.java 642\033[0m
-  \033[90mjava.lang.Thread.\033[0mrun                                    Thread\033[90m.java 1575\033[0m
-\033[31mException:\033[0m Cause
+  \033[90mclojure.core$binding_conveyor_fn$fn__5842.\033[0minvoke        core.clj \033[90m2047\033[0m
+  \033[90mclojure.lang.AFn.\033[0mcall                                   AFn.java \033[90m18\033[0m
+  \033[90mjava.util.concurrent.ThreadPoolExecutor$Worker.\033[0mrun      ThreadPoolExecutor.java \033[90m642\033[0m
+  \033[90mjava.lang.Thread.\033[0mrun                                    Thread.java \033[90m1575\033[0m
+Caused by: \033[31mException:\033[0m Cause
   \033[90mclojure_sublimed.core$track_vars_STAR_.\033[0minvokeStatic
   \033[90mclojure_sublimed.core$track_vars_STAR_.\033[0minvoke
   \033[90mclojure_sublimed.socket_repl$fork_eval$fn__4492.\033[0minvoke
-  \033[90mclojure.core$binding_conveyor_fn$fn__5842.\033[0minvoke        core\033[90m.clj 2047\033[0m
-  \033[90mclojure.lang.AFn.\033[0mcall                                   AFn\033[90m.java 18\033[0m
-  \033[90mjava.util.concurrent.ThreadPoolExecutor$Worker.\033[0mrun      ThreadPoolExecutor\033[90m.java 642\033[0m
-  \033[90mjava.lang.Thread.\033[0mrun                                    Thread\033[90m.java 1575\033[0m"
+  \033[90mclojure.core$binding_conveyor_fn$fn__5842.\033[0minvoke        core.clj \033[90m2047\033[0m
+  \033[90mclojure.lang.AFn.\033[0mcall                                   AFn.java \033[90m18\033[0m
+  \033[90mjava.util.concurrent.ThreadPoolExecutor$Worker.\033[0mrun      ThreadPoolExecutor.java \033[90m642\033[0m
+  \033[90mjava.lang.Thread.\033[0mrun                                    Thread.java \033[90m1575\033[0m"
         (with-out-str (print effect)))))
 
 (deftest humanly-reverse-test
@@ -106,7 +104,7 @@ Exception: Cause
   clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
   clojure_sublimed.core$track_vars_STAR_.invoke
   clojure_sublimed.core$track_vars_STAR_.invokeStatic
-Exception: Cause
+Caused by: Exception: Cause
   java.lang.Thread.run                                    Thread.java 1575
   java.util.concurrent.ThreadPoolExecutor$Worker.run      ThreadPoolExecutor.java 642
   clojure.lang.AFn.call                                   AFn.java 18
@@ -123,13 +121,12 @@ ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}"
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
-  (is (= "
-ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+  (is (= "ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
   user/eval
   clojure.core/binding-conveyor-fn/fn        core.clj 2047
   ThreadPoolExecutor$Worker.run              ThreadPoolExecutor.java 642
   Thread.run                                 Thread.java 1575
-Exception: Cause
+Caused by: Exception: Cause
   clojure-sublimed.core/track-vars*
   clojure-sublimed.socket-repl/fork-eval/fn
   clojure.core/binding-conveyor-fn/fn        core.clj 2047
@@ -144,12 +141,11 @@ Exception: Cause
                    :collapse-common? true
                    :root-cause-only? false
                    :indent           2})
-  (is (= "
-ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+  (is (= "ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
   user$eval10830.invokeStatic
   user$eval10830.invoke
   ... 4 common elements
-Exception: Cause
+Caused by: Exception: Cause
   clojure_sublimed.core$track_vars_STAR_.invokeStatic
   clojure_sublimed.core$track_vars_STAR_.invoke
   clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
@@ -159,10 +155,9 @@ Exception: Cause
   java.lang.Thread.run                                    Thread.java 1575"
         (with-out-str (print effect))))
   
-  (is (= "
-ExceptionInfo: Effect 2 {}
+  (is (= "ExceptionInfo: Effect 2 {}
   ... 7 common elements
-Exception: Cause
+Caused by: Exception: Cause
   clojure_sublimed.core$track_vars_STAR_.invokeStatic
   clojure_sublimed.core$track_vars_STAR_.invoke
   clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
@@ -179,8 +174,7 @@ Exception: Cause
                    :collapse-common? false
                    :root-cause-only? true
                    :indent           2})
-  (is (= "
-Exception: Cause
+  (is (= "Exception: Cause
   clojure_sublimed.core$track_vars_STAR_.invokeStatic
   clojure_sublimed.core$track_vars_STAR_.invoke
   clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
@@ -196,8 +190,7 @@ Exception: Cause
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           2})
-  (is (= "
-Exception: Cause
+  (is (= "Exception: Cause
   clojure_sublimed.core$track_vars_STAR_.invokeStatic
   clojure_sublimed.core$track_vars_STAR_.invoke
   clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
@@ -214,15 +207,14 @@ Exception: Cause
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           4})
-  (is (= "
-ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+  (is (= "ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
     user$eval10830.invokeStatic
     user$eval10830.invoke
     clojure.core$binding_conveyor_fn$fn__5842.invoke        core.clj 2047
     clojure.lang.AFn.call                                   AFn.java 18
     java.util.concurrent.ThreadPoolExecutor$Worker.run      ThreadPoolExecutor.java 642
     java.lang.Thread.run                                    Thread.java 1575
-Exception: Cause
+Caused by: Exception: Cause
     clojure_sublimed.core$track_vars_STAR_.invokeStatic
     clojure_sublimed.core$track_vars_STAR_.invoke
     clojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
@@ -238,15 +230,14 @@ Exception: Cause
                    :collapse-common? false
                    :root-cause-only? false
                    :indent           "\t"})
-  (is (= "
-ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+  (is (= "ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
 \tuser$eval10830.invokeStatic
 \tuser$eval10830.invoke
 \tclojure.core$binding_conveyor_fn$fn__5842.invoke        core.clj 2047
 \tclojure.lang.AFn.call                                   AFn.java 18
 \tjava.util.concurrent.ThreadPoolExecutor$Worker.run      ThreadPoolExecutor.java 642
 \tjava.lang.Thread.run                                    Thread.java 1575
-Exception: Cause
+Caused by: Exception: Cause
 \tclojure_sublimed.core$track_vars_STAR_.invokeStatic
 \tclojure_sublimed.core$track_vars_STAR_.invoke
 \tclojure_sublimed.socket_repl$fork_eval$fn__4492.invoke
@@ -257,29 +248,29 @@ Exception: Cause
         (with-out-str (print effect)))))
 
 (deftest humanly-default-test  
-  (error/install!)
-  (is (= "
-\033[31mExceptionInfo:\033[0m Effect of \"Cause\" \033[90m{:a 1, :b a \"string\"}\033[0m
+  (error/install! {:color? true})
+  (is (= "\033[31mExceptionInfo:\033[0m Effect of \"Cause\" \033[90m{:a 1, :b a \"string\"}\033[0m
   \033[90muser/\033[0meval
   \033[90m... 3 common elements\033[0m
-\033[31mException:\033[0m Cause
+Caused by: \033[31mException:\033[0m Cause
   \033[90mclojure-sublimed.core/\033[0mtrack-vars*
   \033[90mclojure-sublimed.socket-repl/\033[0mfork-eval/fn
-  \033[90mclojure.core/\033[0mbinding-conveyor-fn/fn        core\033[90m.clj 2047\033[0m
-  \033[90mThreadPoolExecutor$Worker.\033[0mrun              ThreadPoolExecutor\033[90m.java 642\033[0m
-  \033[90mThread.\033[0mrun                                 Thread\033[90m.java 1575\033[0m"
+  \033[90mclojure.core/\033[0mbinding-conveyor-fn/fn        core.clj \033[90m2047\033[0m
+  \033[90mThreadPoolExecutor$Worker.\033[0mrun              ThreadPoolExecutor.java \033[90m642\033[0m
+  \033[90mThread.\033[0mrun                                 Thread.java \033[90m1575\033[0m"
         (with-out-str (print effect)))))
 
 (deftest humanly-default-nice-test
-  (error/install! {:reverse? true
+  (error/install! {:color?   true
+                   :reverse? true
                    :indent   3})
   (is (= "
-   \033[90mThread.\033[0mrun                                 Thread\033[90m.java 1575\033[0m
-   \033[90mThreadPoolExecutor$Worker.\033[0mrun              ThreadPoolExecutor\033[90m.java 642\033[0m
-   \033[90mclojure.core/\033[0mbinding-conveyor-fn/fn        core\033[90m.clj 2047\033[0m
+   \033[90mThread.\033[0mrun                                 Thread.java \033[90m1575\033[0m
+   \033[90mThreadPoolExecutor$Worker.\033[0mrun              ThreadPoolExecutor.java \033[90m642\033[0m
+   \033[90mclojure.core/\033[0mbinding-conveyor-fn/fn        core.clj \033[90m2047\033[0m
    \033[90mclojure-sublimed.socket-repl/\033[0mfork-eval/fn
    \033[90mclojure-sublimed.core/\033[0mtrack-vars*
-\033[31mException:\033[0m Cause
+Caused by: \033[31mException:\033[0m Cause
    \033[90m... 3 common elements\033[0m
    \033[90muser/\033[0meval
 \033[31mExceptionInfo:\033[0m Effect of \"Cause\" \033[90m{:a 1, :b a \"string\"}\033[0m"
@@ -293,9 +284,9 @@ Exception: Cause
                    :root-cause-only? true
                    :indent           4})
   (is (= "
-    \033[90mThread.\033[0mrun                                 Thread\033[90m.java 1575\033[0m
-    \033[90mThreadPoolExecutor$Worker.\033[0mrun              ThreadPoolExecutor\033[90m.java 642\033[0m
-    \033[90mclojure.core/\033[0mbinding-conveyor-fn/fn        core\033[90m.clj 2047\033[0m
+    \033[90mThread.\033[0mrun                                 Thread.java \033[90m1575\033[0m
+    \033[90mThreadPoolExecutor$Worker.\033[0mrun              ThreadPoolExecutor.java \033[90m642\033[0m
+    \033[90mclojure.core/\033[0mbinding-conveyor-fn/fn        core.clj \033[90m2047\033[0m
     \033[90mclojure-sublimed.socket-repl/\033[0mfork-eval/fn
     \033[90mclojure-sublimed.core/\033[0mtrack-vars*
 \033[31mException:\033[0m Cause"

@@ -1,3 +1,10 @@
+# WIP
+
+- Removed '\n' in front of non-reversed human-readable exceptions
+- Added 'Caused by: ' to all causes in human-readable exceptions
+- Removed grey color from file extensions (separates file name and line better)
+- Added output color detection and control via `NO_COLOR` env var, `clojure-plus.color=true`/`false` java property
+
 # 1.2.0 - Mar 9, 2025
 
 - `clojure+.error` adds printing for Throwable
