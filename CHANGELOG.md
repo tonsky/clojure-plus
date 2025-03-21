@@ -1,4 +1,4 @@
-# WIP
+# 1.3.0 - Mar 21, 2025
 
 `clojure+.error`:
 
@@ -8,6 +8,16 @@
 - Added 'Caused by: ' to all causes in human-readable exceptions
 - Removed grey color from file extensions (separates file name and line better)
 - Added output color detection and control via `NO_COLOR` env var, `clojure-plus.color=true`/`false` java property
+
+Introducing `clojure+.test`:
+
+- capture output
+- print time taken
+- asserts for `=` and `not=`
+- print test namespace
+- drop `clojure.test` trace elements from exceptions
+- universal `run` fn
+- `:capture-output?` option
 
 # 1.2.0 - Mar 9, 2025
 

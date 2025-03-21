@@ -197,6 +197,10 @@
       [k (get-method test/report k)])))
 
 (defn install!
+  "Improves output of clojure.test. Possible options:
+   
+     :capture-output?  <bool> :: Whether output of successful tests should be
+                                 silenced. True by default."
   ([]
    (install! {}))
   ([opts]
@@ -206,13 +210,19 @@
    (MultiFn/.addMethod test/assert-expr '= assert-expr-=)
    (MultiFn/.addMethod test/assert-expr 'not= assert-expr-not=)))
 
-(defn uninstall! []
+(defn uninstall!
+  "Restore default clojure.test behaviour"
+  []
   (doseq [[k m] clojure-methods-report]
     (MultiFn/.addMethod test/report k m))
   (MultiFn/.removeMethod test/assert-expr '=)
   (MultiFn/.removeMethod test/assert-expr 'not=))
 
-(defn run [& args]
+(defn run
+  "Universal test runner that accepts everything: namespaces, vars, symbols,
+   regexps. Replaces run-tests, run-all-tests, run-test-var, run-test.
+   If invoked with no arguments, runs all tests."
+  [& args]
   (let [vars (for [arg       (if (empty? args) (all-ns) args)
                    var-or-ns (cond
                                (symbol? arg)
@@ -229,10 +239,10 @@
                                 
                                (instance? Pattern arg)
                                (filter #(re-matches arg (name (ns-name %))) (all-ns)))
-                   var (if (instance? Namespace var-or-ns)
-                         (vals (ns-interns var-or-ns))
-                         [var-or-ns])
-                   :when (:test (meta var))]
+                   var       (if (instance? Namespace var-or-ns)
+                               (vals (ns-interns var-or-ns))
+                               [var-or-ns])
+                   :when     (:test (meta var))]
                var)
         ns+vars (->> vars
                   (group-by #(:ns (meta %)))

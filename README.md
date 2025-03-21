@@ -7,7 +7,7 @@ A collection of utilities that improve Clojure experience.
 Add this to deps.edn:
 
 ```clojure
-io.github.tonsky/clojure-plus {:mvn/version "1.2.0"}
+io.github.tonsky/clojure-plus {:mvn/version "1.3.0"}
 ```
 
 ## clojure+.core
@@ -475,6 +475,7 @@ Good news? All this is configurable! Here are the defaults:
 (clojure+.error/install!
   {:clean?           true
    :collapse-common? true
+   :trace-transform  nil
    :color?           true
    :reverse?         false
    :root-cause-only? false
@@ -490,6 +491,131 @@ And if you don’t like it, you can always restore the default printer:
 ```clojure
 (clojure+.error/uninstall!)
 ```
+
+## clojure+.test
+
+`clojure+.test` leverages the extensibility of `clojure.test` to enhance its output.
+
+### Capture output
+
+Tests often print debug information during execution, which can clutter the output. However, if a test passes, this output is irrelevant—the test has already succeeded.
+
+`clojure+.test` silences the output of successful tests (controlled by the `:capture-output?` option) while still printing the full output for failed tests.
+
+### Improved Reporting
+
+Consider a test like this:
+
+```
+(deftest test-name
+  (testing "namespaces"
+    (testing "all-ns"
+      (is (= 0 (count (all-ns)))))))
+```
+
+The default `clojure.test` output will look like this:
+
+```
+FAIL in (test-name) (test_ns.clj:123)
+namespaces all-ns
+expected: (= 0 (count (all-ns)))
+  actual: (not (= 0 675))
+```
+
+And after installing `clojure+.test`, the output becomes:
+
+```
+FAIL in test-ns/test-name (test_ns.clj:123)
+└╴namespaces
+  └╴all-ns
+    ├╴form:     (= 0 (count (all-ns)))
+    ├╴expected: 0
+    └╴actual:   675
+```
+
+A few things to note:
+
+- Name of the test now includes the namespace (`test-name` → `test-ns/test-name`)
+- Testing contexts are visually structured (`namespaces all-ns` → `└╴namespaces └╴all-ns`)
+- For `(is (=` and `(is (not=` checks, the expected and actual values are printed on separate lines, making them easier to compare (`(not (= 0 675))` → `expected: 0 / actual: 675`)
+
+`clojure+.test` also prints the time taken to test each namespace and the total time:
+
+```
+18/21 Testing instant.storage.sweeper-test... 11584 ms
+19/21 Testing instant.util.hazelcast-test... 7 ms
+20/21 Testing instant.util.semver-test... 1 ms
+21/21 Testing instant.util.uuid-test... 126 ms
+╶───╴
+Ran 49 tests containing 450 assertions in 19082 ms.
+9 failures, 2 errors.
+```
+
+Exceptions reported during test runs are also filtered to exclude `clojure.test` machinery. Before:
+
+```
+ERROR in instant.db.instaql-test/some-test (Numbers.java:123)
+└╴abc
+  └╴def
+    ├╴expected: (pos? "caught")
+    └╴actual:   ClassCastException: class java.lang.String cannot be cast to class java.lang.Number (java.lang.String and java.lang.Number are in module java.base of loader 'bootstrap')
+  Numbers.isPos                                 Numbers.java 123
+  clojure.core/pos?                             core.clj 1266
+  clojure.core/apply                            core.clj 667
+  instant.db.instaql-test/fn/fn                 instaql_test.clj 2509
+  instant.db.instaql-test/fn                    instaql_test.clj 2509
+  clojure.test/test-var/fn                      test.clj 717
+  clojure.test/test-var                         test.clj 717
+  clojure+.test/run/fn/fn                       test.clj 224
+  clojure.test/default-fixture                  test.clj 687
+  clojure+.test/run/fn                          test.clj 222
+  clojure.test/default-fixture                  test.clj 687
+  clojure+.test/run                             test.clj 218
+  user/test-all                                 user.clj 25
+  user/eval
+  Compiler.eval                                 Compiler.java 7700
+  clojure-sublimed.socket-repl/eval-code/fn
+  clojure-sublimed.socket-repl/eval-code
+  clojure-sublimed.socket-repl/fork-eval/fn/fn
+  clojure-sublimed.core/track-vars*
+  clojure-sublimed.socket-repl/fork-eval/fn
+  clojure.core/binding-conveyor-fn/fn           core.clj 2047
+  FutureTask.run                                FutureTask.java 317
+  ThreadPoolExecutor.runWorker                  ThreadPoolExecutor.java 1144
+  ThreadPoolExecutor$Worker.run                 ThreadPoolExecutor.java 642
+  Thread.run                                    Thread.java 1570
+```
+
+After:
+
+```
+ERROR in instant.db.instaql-test/some-test (Numbers.java:123)
+└╴abc
+  └╴def
+    ├╴expected: (pos? "caught")
+    └╴actual:   ClassCastException: class java.lang.String cannot be cast to class java.lang.Number (java.lang.String and java.lang.Number are in module java.base of loader 'bootstrap')
+  Numbers.isPos                  Numbers.java 123
+  clojure.core/pos?              core.clj 1266
+  clojure.core/apply             core.clj 667
+  instant.db.instaql-test/fn/fn  instaql_test.clj 2509
+  instant.db.instaql-test/fn     instaql_test.clj 2509
+```
+
+### clojure+.test/run
+
+`clojure.test` provides four different functions to run tests: `run-tests`, `run-all-tests`, `run-test-var`, and `run-test`. It’s very confusing: how to remember which function does what?
+
+`clojure+.test` replaces all of these with a single function: `run`. This function accepts everything: symbols, vars, namespaces, and regexes. When called without arguments, it runs all tests.
+
+### Usage
+
+To enable `clojure+.test`, call:
+
+```
+(clojure+.test/install!)
+```
+
+Note that `clojure+.test` does not replace `clojure.test`. It still relies on `clojure.test` to define tests with `deftest`, `is`, `use-fixtures` etc. `clojure+.test` simply enhances the reporting output of `clojure.test`.
 
 ## clojure+.walk
 
