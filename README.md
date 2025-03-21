@@ -1,6 +1,8 @@
 # Clojure Plus
 
-A collection of utilities that improve Clojure experience.
+> Clojure.core is great, but it can be greater!
+
+An ongoing project to improve experience of using Clojure stdlib.
 
 ## Using
 
