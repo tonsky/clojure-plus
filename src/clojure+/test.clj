@@ -17,8 +17,8 @@
 (def ^:private out
   *out*)
 
-(def ^:private *buffer
-  (atom nil))
+(def ^:private ^:dynamic *buffer*
+  nil)
 
 (def ^:private *time-ns
   (atom nil))
@@ -37,13 +37,13 @@
 
 (defn- capture-output []
   (let [buffer (ByteArrayOutputStream.)
-        _      (reset! *buffer buffer)
         ps     (PrintStream. buffer)
         out    (OutputStreamWriter. buffer)]
     (System/setOut ps)
     (System/setErr ps)
-    (push-thread-bindings {#'*out* out
-                           #'*err* out})))
+    (push-thread-bindings {#'*buffer* buffer
+                           #'*out*    out
+                           #'*err*    out})))
 
 (defn- restore-output []
   (System/setOut system-out)
@@ -51,7 +51,7 @@
   (pop-thread-bindings))
 
 (defn- reprint-output []
-  (print (str @*buffer))
+  (print (str *buffer*))
   (flush))
 
 (defn- report-begin-test-ns [m]
@@ -63,7 +63,7 @@
       (print (str (inc (:idx m)) "/" (:count m) " ")))
     (print (str "Testing " (ns-name (:ns m))))
     (if (:capture-output? config)
-      (do (print "..." (flush)))
+      (do (print "...") (flush))
       (println))))
 
 (defn- report-end-test-ns [m]
@@ -138,7 +138,7 @@
         (binding [error/*trace-transform* trace-transform]
           (println (str indent "└╴uncaught:"))
           (println (:actual m)))
-        (do      
+        (do
           (when-some [message (:message m)]
             (println (str indent "├╴message:") message))
           (println (str indent "├╴expected:") (pr-str (:expected m)))
@@ -230,13 +230,13 @@
                                   (resolve arg)
                                   (the-ns arg)
                                   (throw (ex-info (str "Can’t resolve symbol " arg) {:symbol arg})))]
-                                
+
                                (instance? Namespace arg)
                                [arg]
-                                
+
                                (instance? Var arg)
                                [arg]
-                                
+
                                (instance? Pattern arg)
                                (filter #(re-matches arg (name (ns-name %))) (all-ns)))
                    var       (if (instance? Namespace var-or-ns)
@@ -250,15 +250,25 @@
     (binding [test/*report-counters* (ref test/*initial-report-counters*)]
       (doseq [[idx [ns vars]] (map vector (range) ns+vars)]
         (test/do-report {:type :begin-test-ns, :ns ns, :idx idx, :count (count ns+vars)})
-        (let [once-fixture-fn (test/join-fixtures (::once-fixtures (meta ns)))
-              each-fixture-fn (test/join-fixtures (::each-fixtures (meta ns)))]
-          (once-fixture-fn
-            (fn []
-              (doseq [v (->> vars
-                          (sort-by #(name (:name (meta %)))))]
-                (each-fixture-fn
-                  (fn []
-                    (test/test-var v)))))))
+        (try
+          (let [once-fixture-fn (test/join-fixtures (::once-fixtures (meta ns)))
+                each-fixture-fn (test/join-fixtures (::each-fixtures (meta ns)))]
+            (once-fixture-fn
+              (fn []
+                (doseq [v (->> vars
+                            (sort-by #(name (:name (meta %)))))]
+                  (try
+                    (each-fixture-fn
+                      (fn []
+                        (test/test-var v)))
+                    (catch Throwable t
+                      (test/do-report {:type    :error
+                                       :message "Uncaught exception, not in assertion."
+                                       :actual  t})))))))
+          (catch Throwable t
+            (test/do-report {:type    :error
+                             :message "Uncaught exception, not in assertion."
+                             :actual  t})))
         (test/do-report {:type :end-test-ns, :ns ns, :idx idx, :count (count ns+vars)}))
       (test/do-report (assoc @test/*report-counters* :type :summary))
       @test/*report-counters*)))

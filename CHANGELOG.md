@@ -1,13 +1,17 @@
+# 1.3.1 - Mar 21, 2025
+
+- Removed accidental `nil` output
+
 # 1.3.0 - Mar 21, 2025
 
 `clojure+.error`:
 
-- Added `:trace-transform` option to config
-- Added `*trace-transform*` dynamic variable
+- Added `:trace-transform` option to config #4
+- Added `*trace-transform*` dynamic variable #4
 - Removed '\n' in front of non-reversed human-readable exceptions
 - Added 'Caused by: ' to all causes in human-readable exceptions
 - Removed grey color from file extensions (separates file name and line better)
-- Added output color detection and control via `NO_COLOR` env var, `clojure-plus.color=true`/`false` java property
+- Added output color detection and control via `NO_COLOR` env var, `clojure-plus.color=true`/`false` java property #5
 
 Introducing `clojure+.test`:
 
