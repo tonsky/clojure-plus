@@ -9,16 +9,15 @@
    [java.util.regex Pattern]))
 
 (def ^:private system-out
-  System/out)
+  nil)
 
 (def ^:private system-err
-  System/err)
-
-(def ^:private out
-  *out*)
-
-(def ^:private ^:dynamic *buffer*
   nil)
+
+(def ^:private clojure-test-out
+  nil)
+
+(def ^:private ^:dynamic *buffer*)
 
 (def ^:private *time-ns
   (atom nil))
@@ -26,7 +25,7 @@
 (def ^:private *time-total
   (atom nil))
 
-(def ^:private *has-output?
+(def ^:private *ns-failed?
   (atom false))
 
 (defn- default-config []
@@ -36,28 +35,43 @@
   (default-config))
 
 (defn- capture-output []
+  (Var/.doReset #'system-out System/out)
+  (Var/.doReset #'system-err System/err)
+  (Var/.doReset #'clojure-test-out test/*test-out*)
+  
   (let [buffer (ByteArrayOutputStream.)
         ps     (PrintStream. buffer)
         out    (OutputStreamWriter. buffer)]
     (System/setOut ps)
     (System/setErr ps)
-    (push-thread-bindings {#'*buffer* buffer
-                           #'*out*    out
-                           #'*err*    out})))
+    (push-thread-bindings
+      {#'*buffer*        buffer
+       #'*out*           out
+       #'*err*           out
+       #'test/*test-out* out})))
+
+(defn- flush-output []
+  (.flush System/out)
+  (flush)
+  (binding [*out* clojure-test-out]
+    (when-not @*ns-failed?
+      (println)) ;; newline after "Testing <ns>..."
+    (print (str *buffer*))
+    (flush))
+  (ByteArrayOutputStream/.reset *buffer*))
 
 (defn- restore-output []
-  (System/setOut system-out)
+  (pop-thread-bindings)
   (System/setErr system-err)
-  (pop-thread-bindings))
-
-(defn- reprint-output []
-  (print (str *buffer*))
-  (flush))
+  (System/setOut system-out)
+  (Var/.doReset #'clojure-test-out nil)
+  (Var/.doReset #'system-err nil)
+  (Var/.doReset #'system-out nil))
 
 (defn- report-begin-test-ns [m]
   (reset! *time-ns (System/currentTimeMillis))
   (compare-and-set! *time-total nil (System/currentTimeMillis))
-  (reset! *has-output? false)
+  (reset! *ns-failed? false)
   (test/with-test-out
     (when (and (:idx m) (:count m))
       (print (str (inc (:idx m)) "/" (:count m) " ")))
@@ -69,7 +83,7 @@
 (defn- report-end-test-ns [m]
   (test/with-test-out
     (when (:capture-output? config)
-      (if @*has-output?
+      (if @*ns-failed?
         (println "Finished" (ns-name (:ns m)) "in" (- (System/currentTimeMillis) @*time-ns) "ms")
         (println "" (- (System/currentTimeMillis) @*time-ns) "ms")))))
 
@@ -79,6 +93,8 @@
 
 (defn- report-end-test-var [m]
   (when (:capture-output? config)
+    (when @*ns-failed?
+      (flush-output))
     (restore-output)))
 
 (defn- testing-vars-str [m]
@@ -102,13 +118,8 @@
     (test/inc-report-counter :pass)))
 
 (defn- report-fail [m]
+  (test/inc-report-counter :fail)
   (test/with-test-out
-    (test/inc-report-counter :fail)
-    (when-not @*has-output?
-      (println)
-      (reset! *has-output? true))
-    (when (:capture-output? config)
-      (reprint-output))
     (println "FAIL in" (testing-vars-str m))
     (let [indent (print-testing-contexts)]
       (when-some [message (:message m)]
@@ -116,7 +127,9 @@
       (when-some [form (:form m)]
         (println (str indent "├╴form:    ") (pr-str form)))
       (println (str indent "├╴expected:") (pr-str (:expected m)))
-      (println (str indent "└╴actual:  ") (pr-str (:actual m))))))
+      (println (str indent "└╴actual:  ") (pr-str (:actual m)))))
+  (flush-output)
+  (reset! *ns-failed? true))
 
 (defn- trace-transform [trace]
   (take-while
@@ -125,13 +138,8 @@
     trace))
 
 (defn- report-error [m]
+  (test/inc-report-counter :error)
   (test/with-test-out
-    (test/inc-report-counter :error)
-    (when-not @*has-output?
-      (println)
-      (reset! *has-output? true))
-    (when (:capture-output? config)
-      (reprint-output))
     (println "ERROR in" (testing-vars-str m))
     (let [indent (print-testing-contexts)]
       (if (and (= "Uncaught exception, not in assertion." (:message m)) (nil? (:expected m)))
@@ -144,7 +152,9 @@
           (println (str indent "├╴expected:") (pr-str (:expected m)))
           (binding [error/*trace-transform* trace-transform]
             (println (str indent "└╴actual:"))
-            (println (:actual m))))))))
+            (println (:actual m)))))))
+  (flush-output)
+  (reset! *ns-failed? true))
 
 (defn- report-summary [m]
   (test/with-test-out
@@ -160,26 +170,53 @@
     `(let [expected# ~(nth form 1)
            actual#   ~(nth form 2)
            result#   (= expected# actual#)]
-       (test/do-report {:type     (if result# :pass :fail)
-                        :message  ~msg
-                        :form     '~form
-                        :expected expected#
-                        :actual   actual#})
+       (test/do-report
+         {:type     (if result# :pass :fail)
+          :message  ~msg
+          :form     '~form
+          :expected expected#
+          :actual   actual#})
        result#)
-    (test/assert-predicate msg form)))
+    `(let [actual# [~@(next form)]
+           result# (apply = actual#)]
+       (test/do-report
+         {:type     (if result# :pass :fail)
+          :message  ~msg
+          :expected '~form
+          :actual   (list* '~'not= actual#)})
+       result#)))
 
 (defn- assert-expr-not= [msg form]
   (if (= 3 (count form))
     `(let [expected# ~(nth form 1)
            actual#   ~(nth form 2)
            result#   (not= expected# actual#)]
-       (test/do-report {:type     (if result# :pass :fail)
-                        :message  ~msg
-                        :form     '~form
-                        :expected expected#
-                        :actual   actual#})
+       (test/do-report 
+         {:type     (if result# :pass :fail)
+          :message  ~msg
+          :form     '~form
+          :expected expected#
+          :actual   actual#})
        result#)
-    (test/assert-predicate msg form)))
+    `(let [actual# [~@(next form)]
+           result# (apply not= actual#)]
+       (test/do-report
+         {:type     (if result# :pass :fail)
+          :message  ~msg
+          :expected '~form
+          :actual   (list* '~'= actual#)})
+       result#)))
+
+(defn- assert-expr-not [msg form]
+  `(let [expected# ~form
+         actual#   ~(nth form 1)
+         result#   (= expected# actual#)]
+     (test/do-report
+       {:type     (if result# :pass :fail)
+        :message  ~msg
+        :expected '~form
+        :actual   actual#})
+     result#))
 
 (def ^:private patched-methods-report
   {:begin-test-ns  #'report-begin-test-ns
@@ -208,7 +245,8 @@
    (doseq [[k m] patched-methods-report]
      (MultiFn/.addMethod test/report k @m))
    (MultiFn/.addMethod test/assert-expr '= assert-expr-=)
-   (MultiFn/.addMethod test/assert-expr 'not= assert-expr-not=)))
+   (MultiFn/.addMethod test/assert-expr 'not= assert-expr-not=)
+   (MultiFn/.addMethod test/assert-expr 'not assert-expr-not)))
 
 (defn uninstall!
   "Restore default clojure.test behaviour"

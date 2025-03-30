@@ -1,5 +1,7 @@
 # WIP
 
+- Improved capture-output
+- Improved reporting for `(is (not`, `(is (=` and `(is (not=` for 3+ arguments
 - `clojure+.core/print-class-tree` #6
 
 # 1.3.1 - Mar 21, 2025

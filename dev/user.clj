@@ -11,7 +11,7 @@
   duti/-main)
 
 (defn test-all []
-  (duti/test #"clojure\+\..*"))
+  (duti/test #"clojure\+\.(?!test-test$).*"))
 
 (defn -test-main [_]
-  (duti/test-exit #"clojure\+\..*"))
+  (duti/test-exit #"clojure\+\.(?!test-test$).*"))
