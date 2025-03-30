@@ -1,5 +1,6 @@
 (ns clojure+.test
   (:require
+   [clojure.data :as data]
    [clojure.string :as str]
    [clojure.test :as test]
    [clojure+.error :as error])
@@ -121,13 +122,18 @@
   (test/inc-report-counter :fail)
   (test/with-test-out
     (println "FAIL in" (testing-vars-str m))
-    (let [indent (print-testing-contexts)]
+    (let [indent (print-testing-contexts)
+          {:keys [expected actual missing extra]} m]
       (when-some [message (:message m)]
         (println (str indent "├╴message: ") message))
       (when-some [form (:form m)]
         (println (str indent "├╴form:    ") (pr-str form)))
-      (println (str indent "├╴expected:") (pr-str (:expected m)))
-      (println (str indent "└╴actual:  ") (pr-str (:actual m)))))
+      (println (str indent "├╴expected:") (pr-str expected))
+      (println (str indent (if (or missing extra) "├╴" "└╴") "actual:  ") (pr-str actual))
+      (when missing
+        (println (str indent (if extra "├╴" "└╴") "missing: ") (pr-str missing)))
+      (when extra
+        (println (str indent "└╴extra:   ") (pr-str extra)))))
   (flush-output)
   (reset! *ns-failed? true))
 
@@ -169,13 +175,17 @@
   (if (= 3 (count form))
     `(let [expected# ~(nth form 1)
            actual#   ~(nth form 2)
+           [missing# extra# common#] (data/diff expected# actual#)
            result#   (= expected# actual#)]
        (test/do-report
-         {:type     (if result# :pass :fail)
-          :message  ~msg
-          :form     '~form
-          :expected expected#
-          :actual   actual#})
+         (cond->
+           {:type     (if result# :pass :fail)
+            :message  ~msg
+            :form     '~form
+            :expected expected#
+            :actual   actual#}
+           (and common# missing#) (assoc :missing missing#)
+           (and common# extra#) (assoc :extra extra#)))
        result#)
     `(let [actual# [~@(next form)]
            result# (apply = actual#)]
