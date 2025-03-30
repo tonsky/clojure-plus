@@ -218,9 +218,8 @@
        result#)))
 
 (defn- assert-expr-not [msg form]
-  `(let [expected# ~form
-         actual#   ~(nth form 1)
-         result#   (= expected# actual#)]
+  `(let [actual#   ~(nth form 1)
+         result#   (not actual#)]
      (test/do-report
        {:type     (if result# :pass :fail)
         :message  ~msg
@@ -264,7 +263,8 @@
   (doseq [[k m] clojure-methods-report]
     (MultiFn/.addMethod test/report k m))
   (MultiFn/.removeMethod test/assert-expr '=)
-  (MultiFn/.removeMethod test/assert-expr 'not=))
+  (MultiFn/.removeMethod test/assert-expr 'not=)
+  (MultiFn/.removeMethod test/assert-expr 'not))
 
 (defn run
   "Universal test runner that accepts everything: namespaces, vars, symbols,
