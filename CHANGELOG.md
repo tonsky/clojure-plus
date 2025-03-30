@@ -1,3 +1,7 @@
+# WIP
+
+- `clojure+.core/print-class-tree` #6
+
 # 1.3.1 - Mar 21, 2025
 
 - Removed accidental `nil` output

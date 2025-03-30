@@ -176,3 +176,23 @@
             (= 1 2) :true
             :false)))))
 
+(deftest print-class-tree-test
+  (is (= "LazySeq
+├╴Obj
+│ ├╴Object
+│ ├╴IObj
+│ │ └╴IMeta
+│ └╴Serializable
+├╴IHashEq
+├╴IPending
+├╴ISeq
+│ └╴IPersistentCollection
+│   └╴Seqable
+├╴Sequential
+└╴List
+  └╴SequencedCollection
+    └╴Collection
+      └╴Iterable
+"
+        (with-out-str
+          (core/print-class-tree clojure.lang.LazySeq)))))

@@ -131,3 +131,43 @@
       (= :let test)        `(let ~expr (cond+ ~@rest))
       (= 1 (count clause)) test
       :else                `(if+ ~test ~expr (cond+ ~@rest)))))
+
+(defn print-class-tree
+  "Given class, prints its hierarchy:
+   
+     => (print-class-tree clojure.lang.LazySeq)
+   
+     LazySeq
+     ├╴Obj
+     │ ├╴Object
+     │ ├╴IObj
+     │ │ └╴IMeta
+     │ └╴Serializable
+     ├╴IHashEq
+     ├╴IPending
+     ├╴ISeq
+     │ └╴IPersistentCollection
+     │   └╴Seqable
+     ├╴Sequential
+     └╴List
+       └╴SequencedCollection
+         └╴Collection
+           └╴Iterable"
+  ([cls]
+   (print-class-tree nil true cls))
+  ([indent last? ^Class cls]
+   (println (str indent (.getSimpleName cls)))
+   (let [parents (concat
+                   (when-some [super (.getSuperclass cls)]
+                     [super])
+                   (sort-by Class/.getName
+                     (.getInterfaces cls)))]
+     (doseq [[i p] (map vector (range) parents)
+             :let [child-last? (= i (dec (count parents)))]]
+       (print-class-tree
+         (str
+           (when indent
+             (str (subs indent 0 (- (count indent) 2)) (if last? "  " "│ ")))
+           (if child-last? "└╴" "├╴"))
+         child-last?
+         p)))))
