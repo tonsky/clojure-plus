@@ -54,9 +54,19 @@
   (is (throw (ex-info "inside (is)" {:a 1})))
   (throw (ex-info "outside" {:b 2})))
 
+(defn h []
+  (throw (ex-info "Oops" {})))
+
+(defn g []
+  (h))
+
+(deftest line-number-test
+  (is (g)))
+
 #_(test+/run #'out-test)
 #_(test+/run #'equal-test)
 #_(test+/run #'not-test)
 #_(test+/run #'nesting-test)
 #_(test+/run #'exceptions-test)
+#_(test+/run #'line-number-test)
 (test+/run *ns*)
