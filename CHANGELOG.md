@@ -1,3 +1,9 @@
+# WIP
+
+`clojure+.error`:
+
+- Add compatibility with Java 17 #7
+
 # 1.3.2 - Mar 30, 2025
 
 `clojure+.test`:

@@ -138,7 +138,8 @@
 (defn- pad [ch ^long len]
   (when (pos? len)
     (let [sb (StringBuilder. len)]
-      (.repeat sb (int ch) len)
+      (dotimes [_ len]
+        (.append sb (char ch)))
       (str sb))))
 
 (defn- split-file [s]
