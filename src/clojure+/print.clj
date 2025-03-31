@@ -1,5 +1,6 @@
 (ns clojure+.print
   (:require
+   [clojure.java.io :as io]
    [clojure.pprint :as pprint]
    [clojure.string :as str])
   (:import
@@ -15,6 +16,21 @@
    [java.util List]
    [java.util.concurrent Future TimeUnit]
    [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
+
+(def runtime-version
+  (let [v (System/getProperty "java.version")]
+    (if (str/starts-with? v "1.")
+      (-> (str/split v #"\.") second parse-long)
+      (-> (str/split v #"\.") first parse-long))))
+
+(defmacro if-version-gte
+  ([version if-branch]
+   (when (<= version runtime-version)
+     if-branch))
+  ([version if-branch else-branch]
+   (if (<= version runtime-version)
+     if-branch
+     else-branch)))
 
 (def ^:private *catalogue
   (atom #{}))
@@ -125,7 +141,7 @@
 
 (defn print-objects [^Object/1 arr ^Writer w]
   (let [cls  (class arr)
-        base (.componentType cls)]
+        base (.getComponentType cls)]
     (cond
       (= Object base)
       (do
@@ -134,11 +150,14 @@
       
       
       :else
-      (do
+      (let [name (pr-str cls)
+            name (if (and
+                       (str/starts-with? name "java.lang.")
+                       (= 9 (.lastIndexOf name ".")))
+                   (subs name 10)
+                   name)]
         (.write w "#array ^")
-        (if (= "java.lang" (.getPackageName cls))
-          (.write w (subs (pr-str cls) (count "java.lang.")))
-          (pr-on w cls))
+        (.write w name)
         (.write w " ")
         (print-array arr w)))))
 
@@ -149,7 +168,7 @@
   (let [class (:tag (meta vals))
         class (cond-> class
                 (symbol? class) resolve)
-        base  (Class/.componentType class)
+        base  (Class/.getComponentType class)
         arr   ^Object/1 (make-array base (count vals))]
     (doseq [i (range (count vals))
             :let [x (nth vals i)]]
@@ -341,10 +360,11 @@
 ;; java.lang
 
 (defn print-thread [^Thread t ^Writer w]
-  (when (.isVirtual t)
-    (.write w "^:virtual "))
+  (if-version-gte 21
+    (when (.isVirtual t)
+      (.write w "^:virtual ")))
   (.write w "#thread [")
-  (pr-on w (.threadId t))
+  (pr-on w (if-version-gte 19 (.threadId t) (.getId t)))
   (.write w " ")
   (pr-on w (.getName t))
   (let [g (.getThreadGroup t)]
@@ -377,7 +397,7 @@
 
 ;; java.nio.file
 
-(defliteral Path str 'path #(Path/of % (make-array String 0)))
+(defliteral Path str 'path #(File/.toPath (io/file %)))
 
 
 ;; java.time

@@ -1,8 +1,6 @@
-# WIP
+# 1.3.3 - Mar 31, 2025
 
-`clojure+.error`:
-
-- Add compatibility with Java 17 #7
+- Add compatibility with Java 8 #7
 
 # 1.3.2 - Mar 30, 2025
 

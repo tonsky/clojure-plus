@@ -14,7 +14,7 @@
    [java.nio.file Path]
    [java.time DayOfWeek Duration Instant LocalDate LocalDateTime LocalTime Month MonthDay OffsetDateTime OffsetTime Period Year YearMonth ZonedDateTime ZoneId ZoneOffset]
    [java.time.temporal ChronoUnit]
-   [java.util ArrayDeque List]
+   [java.util ArrayDeque ArrayList]
    [java.util.concurrent Future TimeUnit]
    [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
 
@@ -31,7 +31,10 @@
     (concat [1 2] [3])     "(1 2 3)"
     (cons 1 [2 3])         "(1 2 3)"
     (range 1 4)            "(1 2 3)"
-    (List/of 1 2 3)        "[1 2 3]"
+    (doto (ArrayList.)
+      (.add 1)
+      (.add 2)
+      (.add 3))            "[1 2 3]"
     (first {:a 1})         "[:a 1]"
     {:a 1 :b 2}            "{:a 1, :b 2}"
     #{:a :b :c}            "#{:c :b :a}"
@@ -320,15 +323,15 @@
         _ (is (re-matches #"\#thread \[\d+ \"[^\"]+\"\]" (pr-str t)))
 
         t (Thread. "the \"thread\"")
-        _ (is (= (str "#thread [" (.threadId t) " \"the \\\"thread\\\"\"]") (pr-str t)))
+        _ (is (= (str "#thread [" (print/if-version-gte 19 (.threadId t) (.getId t)) " \"the \\\"thread\\\"\"]") (pr-str t)))]
+    (print/if-version-gte 21
+      (let [t (-> (Thread/ofVirtual)
+                (.name "abc")
+                (.start ^Runnable #(+ 1 2)))
+            _ (is (str/starts-with? (pr-str t) (str "^:virtual #thread [" (.threadId t) " \"abc\"")))
 
-        t (-> (Thread/ofVirtual)
-            (.name "abc")
-            (.start ^Runnable #(+ 1 2)))
-        _ (is (str/starts-with? (pr-str t) (str "^:virtual #thread [" (.threadId t) " \"abc\"")))
-
-        _ (is (thrown-with-cause-msg? Exception #"No reader function for tag thread"
-                (read-string "#thread [123 \"name\"]")))]))
+            _ (is (thrown-with-cause-msg? Exception #"No reader function for tag thread"
+                    (read-string "#thread [123 \"name\"]")))]))))
 
 (deftest soft-ref-test
   (let [o  (atom 123)
