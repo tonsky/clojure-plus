@@ -122,7 +122,7 @@
 
 (defn- ansi-grey []
   (when (:color? config)
-    "\033[90m"))
+    "\033[37m"))
 
 (defn- ansi-reset []
   (when (:color? config)
