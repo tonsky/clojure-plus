@@ -1,3 +1,13 @@
+# 1.4.0 - Apr 30, 2025
+
+Introducing `clojure+.hashp`:
+
+- Adds support for quick debugging with `#p` reader tag.
+
+`clojure+.error`:
+
+- Improved gray color used in exceptions
+
 # 1.3.3 - Mar 31, 2025
 
 - Add compatibility with Java 8 #7
@@ -54,9 +64,12 @@ Introducing `clojure+.test`:
 
 # 1.0.0 - Jan 28, 2025
 
-Initial version:
+Introducing `clojure+.core`:
 
-- if+
-- when+
-- cond+
-- clojure+.walk
+- `if+`
+- `when+`
+- `cond+`
+
+Introducing `clojure+.walk`:
+
+- A drop-in replacement for `clojure.walk` that does not recreate data structures if they didn’t change

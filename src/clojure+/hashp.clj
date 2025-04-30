@@ -67,8 +67,6 @@
     (list form x)))
 
 (defn hashp
-  "Add #p before any form to quickly print its value to output next time
-   it’s evaluated. Works inside -> ->> too!"
   [form]
   (let [x-sym      (gensym "x")
         y-sym      (gensym "y")
@@ -87,6 +85,18 @@
      ::undef)))
 
 (defn install!
+  "Enables #p reader tag. Add #p before any form to quickly print its value
+   to output next time it’s evaluated. Works inside -> ->> too!
+
+     #p (+ 1 2)
+
+     => #p (+ 1 2) [user/eval4348:77]
+        3
+
+   Possible options:
+
+     :color?           <bool> :: Whether to use color output. Autodetect by default.
+     :symbol           <sym>  :: Which symbol to use for reader tag. 'p by default."
   ([]
    (install! {}))
   ([opts]

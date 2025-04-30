@@ -9,7 +9,7 @@ An ongoing project to improve experience of using Clojure stdlib.
 Add this to deps.edn:
 
 ```clojure
-io.github.tonsky/clojure-plus {:mvn/version "1.3.3"}
+io.github.tonsky/clojure-plus {:mvn/version "1.4.0"}
 ```
 
 ## clojure+.core
@@ -113,6 +113,73 @@ Declare variables inside conditions, just like if+:
   ;; matching branch sees them too
   [x y]) ;; => [2 3]
 ```
+
+## clojure+.hashp
+
+A debugger that’s simpler and better than even `println`.
+
+Sometimes, you’re working deep inside a function and want to quickly check some internal values. For example, the value of `y` here:
+
+```clojure
+(defn f []
+  (let [x 1
+        y (+ x 2)]
+    (* x y)))
+```
+
+The common wisdom is to use `println`:
+
+```clojure
+(defn f []
+  (let [x 1
+        y (+ x 2)
+        _ (println "y" y)]
+    (* x y)))
+```
+
+Not too bad! But it can be even better:
+
+```clojure
+(defn f []
+  (let [x 5
+        y #p (+ x 2)]
+    (* x y)))
+```
+
+Evaluating `(f)` will print something like this to `*out*`:
+
+```
+#p (+ x 2) [user/f:1]
+7
+```
+
+Unlike `println`, `#p`:
+
+- is faster to type
+- doesn’t introduce an extra level of nesting
+- returns the original value, so it can be put inline
+- prints location and form, making it easier to find in the output
+- works inside `->` and `->>`
+
+About that last point. Usually, printing something from the middle of a long `->` chain is a pain, even with `println`. Whereas `#p`, it just works:
+
+```clojure
+(-> x
+    hsql/format
+    #p first        ;; <-- just add it like this
+    #p (sql-pretty) ;; <-- or like this
+    println)
+```
+
+To start using `#p`, call
+
+```clojure
+(clojure+.hashp/install!)
+```
+
+We recommend doing this in dev mode (e.g. in `dev/user.clj`), so forgotten `#p` don’t make it into production.
+
+Inspired by [weavejester/hashp](https://github.com/weavejester/hashp).
 
 ## clojure+.print
 
