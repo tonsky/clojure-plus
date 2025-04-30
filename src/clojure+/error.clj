@@ -2,36 +2,17 @@
   (:require
    [clojure.java.io :as io]
    [clojure.stacktrace :as stacktrace]
-   [clojure.string :as str])
+   [clojure.string :as str]
+   [clojure+.util :as util])
   (:import
    [clojure.lang Compiler ExceptionInfo MultiFn]
    [java.io Writer]))
-
-(defn- color? []
-  (cond
-    (System/getenv "NO_COLOR")
-    false
-
-    (= "true" (System/getProperty "clojure-plus.color"))
-    true
-
-    (System/getProperty "clojure-plus.color")
-    false
-
-    (find-ns 'nrepl.core)
-    true
-
-    (System/console)
-    true
-
-    :else
-    true))
 
 (defn- default-config []
   {:clean?           true
    :trace-transform  nil
    :collapse-common? true
-   :color?           (color?)
+   :color?           (util/color?)
    :reverse?         false
    :root-cause-only? false
    :indent           2})

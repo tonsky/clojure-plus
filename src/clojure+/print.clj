@@ -540,7 +540,7 @@
    (let [readers (data-readers opts)]
      (alter-var-root #'*data-readers* merge readers)
      (when (thread-bound? #'*data-readers*)
-       (set! *data-readers* (.getRawRoot #'*data-readers*))))))
+       (set! *data-readers* (merge *data-readers* readers))))))
 
 (defn install!
   "Install both printers and readers for most of Clojure built-in data structures.
