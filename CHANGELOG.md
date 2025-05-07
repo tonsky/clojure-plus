@@ -1,3 +1,7 @@
+# WIP
+
+- Support Clojure 1.10.1+ #13
+
 # 1.4.0 - Apr 30, 2025
 
 Introducing `clojure+.hashp`:

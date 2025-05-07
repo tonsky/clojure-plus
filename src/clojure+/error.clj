@@ -145,7 +145,7 @@
     (write w "\n" indent "#error {")
     
     ;; class
-    (write w "\n" indent " :class   " (Class/.getName class))
+    (write w "\n" indent " :class   " (.getName ^Class class))
     
     ;; message
     (when message
@@ -249,7 +249,7 @@
       (print-method message w))
 
     ;; class
-    (write w "\n" indent " :class   " (Class/.getName class))
+    (write w "\n" indent " :class   " (.getName ^Class class))
 
     (write w "}")))
 
@@ -270,7 +270,7 @@
     (doseq [[idx t] (map vector (range) ts)
             :let [{:keys [class message data trace common]} t]]
       ;; class
-      (write w (when (pos? idx) "\nCaused by: ") (ansi-red) (Class/.getSimpleName class))
+      (write w (when (pos? idx) "\nCaused by: ") (ansi-red) (.getSimpleName ^Class class))
       
       ;; message
       (if message
@@ -339,7 +339,7 @@
           (write w right-pad "  " file " " (ansi-grey) line (ansi-reset))))
       
       ;; class
-      (write w "\n" (when (< idx (dec (count ts))) "Caused by: ") (ansi-red) (Class/.getSimpleName class))
+      (write w "\n" (when (< idx (dec (count ts))) "Caused by: ") (ansi-red) (.getSimpleName ^Class class))
       
       ;; message
       (if message
@@ -401,12 +401,12 @@
    (install! {}))
   ([opts]
    (.doReset #'config (merge (default-config) opts))
-   (MultiFn/.addMethod print-method Throwable patched-print-method)))
+   (.addMethod ^MultiFn print-method Throwable patched-print-method)))
 
 (defn uninstall!
   "Restore default Clojure printer for Throwable"
   []
-  (MultiFn/.addMethod print-method Throwable clojure-print-method))
+  (.addMethod ^MultiFn print-method Throwable clojure-print-method))
 
 (comment
   (install! {; :color? false

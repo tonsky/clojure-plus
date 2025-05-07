@@ -20,8 +20,8 @@
 (def runtime-version
   (let [v (System/getProperty "java.version")]
     (if (str/starts-with? v "1.")
-      (-> (str/split v #"\.") second parse-long)
-      (-> (str/split v #"\.") first parse-long))))
+      (-> (str/split v #"\.") second Long/parseLong)
+      (-> (str/split v #"\.") first Long/parseLong))))
 
 (defmacro if-version-gte
   ([version if-branch]

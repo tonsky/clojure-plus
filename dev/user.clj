@@ -16,7 +16,7 @@
 (defn -main [& args]
   (let [{port "--port"} args
         port (if port
-               (parse-long port)
+               (Long/parseLong port)
                (+ 1024 (rand-int 64512)))
         _    (println "Started Server Socket REPL on port" port)
         file (io/file ".repl-port")]

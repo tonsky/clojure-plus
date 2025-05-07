@@ -36,7 +36,7 @@
      (StackTraceElement. "java.lang.Thread" "run" "Thread.java" 1575)]))
 
 (def ^ExceptionInfo effect-2
-  (ExceptionInfo. "Effect 2" nil cause))
+  (ExceptionInfo. "Effect 2" {} cause))
 
 (.setStackTrace effect-2
   (.getStackTrace cause))

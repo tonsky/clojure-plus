@@ -160,7 +160,7 @@
    (let [parents (concat
                    (when-some [super (.getSuperclass cls)]
                      [super])
-                   (sort-by Class/.getName
+                   (sort-by #(.getName ^Class %)
                      (.getInterfaces cls)))]
      (doseq [[i p] (map vector (range) parents)
              :let [child-last? (= i (dec (count parents)))]]

@@ -18,7 +18,7 @@
 (def ^:private clojure-test-out
   nil)
 
-(def ^:private ^:dynamic *buffer*)
+(def ^:private ^:dynamic ^ByteArrayOutputStream *buffer*)
 
 (def ^:private *time-ns
   (atom nil))
@@ -59,7 +59,7 @@
       (println)) ;; newline after "Testing <ns>..."
     (print (str *buffer*))
     (flush))
-  (ByteArrayOutputStream/.reset *buffer*))
+  (.reset *buffer*))
 
 (defn- restore-output []
   (pop-thread-bindings)
@@ -252,19 +252,19 @@
   ([opts]
    (.doReset #'config (merge (default-config) opts))
    (doseq [[k m] patched-methods-report]
-     (MultiFn/.addMethod test/report k @m))
-   (MultiFn/.addMethod test/assert-expr '= assert-expr-=)
-   (MultiFn/.addMethod test/assert-expr 'not= assert-expr-not=)
-   (MultiFn/.addMethod test/assert-expr 'not assert-expr-not)))
+     (.addMethod ^MultiFn test/report k @m))
+   (.addMethod ^MultiFn test/assert-expr '= assert-expr-=)
+   (.addMethod ^MultiFn test/assert-expr 'not= assert-expr-not=)
+   (.addMethod ^MultiFn test/assert-expr 'not assert-expr-not)))
 
 (defn uninstall!
   "Restore default clojure.test behaviour"
   []
   (doseq [[k m] clojure-methods-report]
-    (MultiFn/.addMethod test/report k m))
-  (MultiFn/.removeMethod test/assert-expr '=)
-  (MultiFn/.removeMethod test/assert-expr 'not=)
-  (MultiFn/.removeMethod test/assert-expr 'not))
+    (.addMethod ^MultiFn test/report k m))
+  (.removeMethod ^MultiFn test/assert-expr '=)
+  (.removeMethod ^MultiFn test/assert-expr 'not=)
+  (.removeMethod ^MultiFn test/assert-expr 'not))
 
 (defn run
   "Universal test runner that accepts everything: namespaces, vars, symbols,

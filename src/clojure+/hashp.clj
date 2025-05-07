@@ -47,8 +47,14 @@
   (let [position (pos)
         form     (walk/postwalk
                    (fn [form]
-                     (if (and (list? form) (::form (meta form)))
-                       (TaggedLiteral/create (:symbol config) (::form (meta form)))
+                     (if (and (seq? form) (seq? (first form)) (= ::undef (second form)))
+                       (let [form (-> form   ; ((fn ([_#] ...)))
+                                    first    ;  (fn ([_#] ...))
+                                    second   ;      ([_#] (hashp-impl ...))
+                                    second   ;            (hashp-impl '~form ~form)
+                                    second   ;                        '~form
+                                    second)] ;                         ~form
+                         (TaggedLiteral/create (:symbol config) form))
                        form))
                    form)]
     (locking lock
@@ -66,23 +72,21 @@
     (list* (concat form [x]))
     (list form x)))
 
-(defn hashp
-  [form]
+(defn hashp [form]
   (let [x-sym      (gensym "x")
         y-sym      (gensym "y")
         form-first (add-first x-sym form)
         form-last  (add-last y-sym form)]
-    `^{::form ~form}
-    ((fn
-       ([_#]
-        (hashp-impl '~form ~form))
-       ([~x-sym ~y-sym]
-        (hashp-impl '~form
-          (cond
-            (= ::undef ~x-sym) ~form-last
-            (= ::undef ~y-sym) ~form-first
-            :else             (throw (Exception. "Impossible!"))))))
-     ::undef)))
+    `((fn
+        ([_#]
+         (hashp-impl '~form ~form))
+        ([~x-sym ~y-sym]
+         (hashp-impl '~form
+           (cond
+             (= ::undef ~x-sym) ~form-last
+             (= ::undef ~y-sym) ~form-first
+             :else              (throw (Exception. "Impossible!"))))))
+      ::undef)))
 
 (defn install!
   "Enables #p reader tag. Add #p before any form to quickly print its value
