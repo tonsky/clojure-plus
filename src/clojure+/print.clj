@@ -23,12 +23,23 @@
       (-> (str/split v #"\.") second Long/parseLong)
       (-> (str/split v #"\.") first Long/parseLong))))
 
-(defmacro if-version-gte
+(defmacro if-java-version-gte
   ([version if-branch]
    (when (<= version runtime-version)
      if-branch))
   ([version if-branch else-branch]
    (if (<= version runtime-version)
+     if-branch
+     else-branch)))
+
+(defmacro if-clojure-version-gte
+  ([version if-branch]
+   `(if-clojure-version-gte ~version ~if-branch nil))
+  ([version if-branch else-branch]
+   (if (>= (compare
+            [(:major *clojure-version*) (:minor *clojure-version*) (:incremental *clojure-version* 0)]
+            (->> (str/split version #"\.") (mapv #(Long/parseLong %))))
+          0)
      if-branch
      else-branch)))
 
@@ -109,7 +120,7 @@
         (aset arr idx (byte b))))
     arr))
 
-(swap! *catalogue conj {:class byte/1  :print #'print-bytes :tag 'bytes :read #'read-bytes})
+(swap! *catalogue conj {:class (Class/forName "[B") :print #'print-bytes :tag 'bytes :read #'read-bytes})
 
 
 (defn make-print-array [tag]
@@ -119,18 +130,18 @@
     (.write w " ")
     (pr-on w (vec arr))))
 
-(swap! *catalogue conj {:class boolean/1 :print (make-print-array 'booleans) :tag 'booleans :read #'boolean-array})
-(swap! *catalogue conj {:class char/1    :print (make-print-array 'chars)    :tag 'chars    :read #'char-array})
-(swap! *catalogue conj {:class short/1   :print (make-print-array 'shorts)   :tag 'shorts   :read #'short-array})
-(swap! *catalogue conj {:class int/1     :print (make-print-array 'ints)     :tag 'ints     :read #'int-array})
-(swap! *catalogue conj {:class long/1    :print (make-print-array 'longs)    :tag 'longs    :read #'long-array})
-(swap! *catalogue conj {:class float/1   :print (make-print-array 'floats)   :tag 'floats   :read #'float-array})
-(swap! *catalogue conj {:class double/1  :print (make-print-array 'doubles)  :tag 'doubles  :read #'double-array})
+(swap! *catalogue conj {:class (Class/forName "[Z") :print (make-print-array 'booleans) :tag 'booleans :read #'boolean-array})
+(swap! *catalogue conj {:class (Class/forName "[C") :print (make-print-array 'chars)    :tag 'chars    :read #'char-array})
+(swap! *catalogue conj {:class (Class/forName "[S") :print (make-print-array 'shorts)   :tag 'shorts   :read #'short-array})
+(swap! *catalogue conj {:class (Class/forName "[I") :print (make-print-array 'ints)     :tag 'ints     :read #'int-array})
+(swap! *catalogue conj {:class (Class/forName "[J") :print (make-print-array 'longs)    :tag 'longs    :read #'long-array})
+(swap! *catalogue conj {:class (Class/forName "[F") :print (make-print-array 'floats)   :tag 'floats   :read #'float-array})
+(swap! *catalogue conj {:class (Class/forName "[D") :print (make-print-array 'doubles)  :tag 'doubles  :read #'double-array})
 
 (defn read-strings [xs]
   (into-array String xs))
 
-(swap! *catalogue conj {:class String/1 :print (make-print-array 'strings) :tag 'strings :read #'read-strings})
+(swap! *catalogue conj {:class (Class/forName "[Ljava.lang.String;") :print (make-print-array 'strings) :tag 'strings :read #'read-strings})
 
 
 (defn- print-array [arr w]
@@ -139,46 +150,55 @@
       (@#'clojure.core/print-sequential "[" print-array " " "]" arr w)
       (pr-on w arr))))
 
-(defn print-objects [^Object/1 arr ^Writer w]
-  (let [cls  (class arr)
-        base (.getComponentType cls)]
-    (cond
-      (= Object base)
-      (do
-        (.write w "#objects ")
-        (pr-on w (vec arr)))
-      
-      
-      :else
+(defn array-type-str ^String [^Class cls]
+  (loop [cls cls
+         dim 0]
+    (if (.isArray cls)
+      (recur (.getComponentType cls) (inc dim))
       (let [name (pr-str cls)
             name (if (and
                        (str/starts-with? name "java.lang.")
                        (= 9 (.lastIndexOf name ".")))
                    (subs name 10)
                    name)]
+        (str name "/" dim)))))
+
+(defn print-objects [arr ^Writer w]
+  (let [cls  (class arr)
+        name (array-type-str cls)]
+    (cond
+      (= "Object/1" name)
+      (do
+        (.write w "#objects ")
+        (pr-on w (vec arr)))
+      
+      :else
+      (do
         (.write w "#array ^")
         (.write w name)
         (.write w " ")
         (print-array arr w)))))
 
-(swap! *catalogue conj {:class Object/1 :print #'print-objects :tag 'objects :read #'object-array})
+(swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'objects :read #'object-array})
 
 
-(defn read-array [vals]
-  (let [class (:tag (meta vals))
-        class (cond-> class
-                (symbol? class) resolve)
-        base  (Class/.getComponentType class)
-        arr   ^Object/1 (make-array base (count vals))]
-    (doseq [i (range (count vals))
-            :let [x (nth vals i)]]
-      (aset arr i
-        (if (.isArray base)
-          (read-array (vary-meta x assoc :tag base))
-          x)))
-    arr))
+(if-clojure-version-gte "1.12.0"
+  (defn read-array [vals]
+    (let [class (:tag (meta vals))
+          class (cond-> class
+                  (symbol? class) resolve)
+          base  (.getComponentType ^Class class)
+          arr   ^{:tag "[Ljava.lang.Object;"} (make-array base (count vals))]
+      (doseq [i (range (count vals))
+              :let [x (nth vals i)]]
+        (aset arr i
+          (if (.isArray base)
+            (read-array (vary-meta x assoc :tag base))
+            x)))
+      arr)))
 
-(swap! *catalogue conj {:class Object/1 :print #'print-objects :tag 'array :read #'read-array})
+(if-clojure-version-gte "1.12.0"
+  (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'array :read #'read-array}))
 
 
 ;; refs
@@ -253,7 +273,7 @@
   (.write w (-> f class .getName Compiler/demunge)))
 
 (defn read-fn [sym]
-  (let [cls  (-> sym str (str/split #"/") (->> (map Compiler/munge) (str/join "$") Class/forName))
+  (let [cls  (-> sym str (str/split #"/") (->> (map #(Compiler/munge %)) (str/join "$") Class/forName))
         ctor (.getDeclaredConstructor cls (make-array Class 0))]
     (if ctor
       (.newInstance ctor (make-array Object 0))
@@ -360,11 +380,11 @@
 ;; java.lang
 
 (defn print-thread [^Thread t ^Writer w]
-  (if-version-gte 21
+  (if-java-version-gte 21
     (when (.isVirtual t)
       (.write w "^:virtual ")))
   (.write w "#thread [")
-  (pr-on w (if-version-gte 19 (.threadId t) (.getId t)))
+  (pr-on w (if-java-version-gte 19 (.threadId t) (.getId t)))
   (.write w " ")
   (pr-on w (.getName t))
   (let [g (.getThreadGroup t)]
@@ -397,7 +417,7 @@
 
 ;; java.nio.file
 
-(defliteral Path str 'path #(File/.toPath (io/file %)))
+(defliteral Path str 'path #(.toPath (io/file %)))
 
 
 ;; java.time
@@ -506,9 +526,9 @@
   ([opts]
    (let [catalogue (catalogue opts)]
      (doseq [{:keys [class print]} catalogue]
-       (MultiFn/.addMethod print-method class print)
-       (MultiFn/.addMethod print-dup class print)
-       (MultiFn/.addMethod pprint/simple-dispatch class #(print % *out*))))))
+       (.addMethod ^MultiFn print-method class print)
+       (.addMethod ^MultiFn print-dup class print)
+       (.addMethod ^MultiFn pprint/simple-dispatch class #(print % *out*))))))
 
 (defn data-readers
   "List of all readers this library can install. Returns map of {symbol -> var}

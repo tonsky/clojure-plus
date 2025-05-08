@@ -50,19 +50,19 @@
         (pr-str (boolean-array 0))))
 
   (let [arr (read-string "#booleans [true false true]")]
-    (is (= boolean/1 (class arr)))
+    (is (= (Class/forName "[Z") (class arr)))
     (is (= [true false true] (vec arr)))))
 
 (deftest bytes-test
   (let [_   (is (= "#bytes \"00010203649C7F80FF\"" (pr-str (byte-array [0 1 2 3 100 -100 127 -128 -1]))))
         arr (read-string "#bytes \"00010203649C7F80FF\"")
-        _   (is (= byte/1 (class arr)))
+        _   (is (= (Class/forName "[B") (class arr)))
         _   (is (= [0 1 2 3 100 -100 127 -128 -1] (vec arr)))
   
         _   (is (= "#bytes \"\"" (pr-str (byte-array 0))))
         arr (read-string "#bytes \"\"")
-        _   (is (= byte/1 (class arr)))
-        _   (is (= 0 (alength ^byte/1 arr)))]))
+        _   (is (= (Class/forName "[B") (class arr)))
+        _   (is (= 0 (alength ^{:tag "[B"} arr)))]))
 
 (deftest chars-test
   (is (= "#chars [\\a \\b \\c]"
@@ -72,7 +72,7 @@
         (pr-str (char-array 0))))
 
   (let [arr (read-string "#chars [\\a \\b \\c]")]
-    (is (= char/1 (class arr)))
+    (is (= (Class/forName "[C") (class arr)))
     (is (= [\a \b \c] (vec arr)))))
 
 (deftest shorts-test
@@ -83,7 +83,7 @@
         (pr-str (short-array 0))))
 
   (let [arr (read-string "#shorts [1 2 3]")]
-    (is (= short/1 (class arr)))
+    (is (= (Class/forName "[S") (class arr)))
     (is (= [1 2 3] (vec arr)))))
 
 (deftest ints-test
@@ -94,7 +94,7 @@
         (pr-str (int-array 0))))
 
   (let [arr (read-string "#ints [1 2 3]")]
-    (is (= int/1 (class arr)))
+    (is (= (Class/forName "[I") (class arr)))
     (is (= [1 2 3] (vec arr)))))
 
 (deftest longs-test
@@ -105,7 +105,7 @@
         (pr-str (long-array 0))))
 
   (let [arr (read-string "#longs [1 2 3]")]
-    (is (= long/1 (class arr)))
+    (is (= (Class/forName "[J") (class arr)))
     (is (= [1 2 3] (vec arr)))))
 
 (deftest floats-test
@@ -116,7 +116,7 @@
         (pr-str (float-array 0))))
 
   (let [arr (read-string "#floats [1.0 2.0 3.5]")]
-    (is (= float/1 (class arr)))
+    (is (= (Class/forName "[F") (class arr)))
     (is (= [1.0 2.0 3.5] (vec arr)))))
 
 (deftest doubles-test
@@ -127,7 +127,7 @@
         (pr-str (double-array 0))))
 
   (let [arr (read-string "#doubles [1.0 2.0 3.5]")]
-    (is (= double/1 (class arr)))
+    (is (= (Class/forName "[D") (class arr)))
     (is (= [1.0 2.0 3.5] (vec arr)))))
 
 (deftest strings-test
@@ -141,7 +141,7 @@
         (pr-str (make-array String 2))))
 
   (let [arr (read-string "#strings [\"a\" \"b\" \"c\"]")]
-    (is (= String/1 (class arr)))
+    (is (= (Class/forName "[Ljava.lang.String;") (class arr)))
     (is (= ["a" "b" "c"] (vec arr)))))
 
 (deftest objects-test
@@ -155,25 +155,28 @@
         (pr-str (make-array Object 2))))
 
   (let [arr (read-string "#objects [\"a\" \"b\" \"c\"]")]
-    (is (= Object/1 (class arr)))
+    (is (= (Class/forName "[Ljava.lang.Object;") (class arr)))
     (is (= ["a" "b" "c"] (vec arr)))))
 
 (deftest array-test
   (is (= "#array ^java.io.File/1 [#file \"a\" #file \"b\" #file \"c\"]"
         (pr-str (into-array File [(io/file "a") (io/file "b") (io/file "c")]))))
 
-  (let [arr (read-string "#array ^java.io.File/1 [#file \"a\" #file \"b\" #file \"c\"]")]
-    (is (= File/1 (class arr)))
-    (is (= [(io/file "a") (io/file "b") (io/file "c")] (vec arr)))))
+  (print/if-clojure-version-gte "1.12.0"
+    (let [arr (read-string "#array ^java.io.File/1 [#file \"a\" #file \"b\" #file \"c\"]")]
+      (is (= (Class/forName "[Ljava.io.File;") (class arr)))
+      (is (= [(io/file "a") (io/file "b") (io/file "c")] (vec arr))))))
 
 (deftest multi-array-test
   (is (= "#array ^String/2 [[\"a\"] [\"b\" \"c\"]]"
-        (pr-str (into-array String/1 [(into-array String ["a"])
-                                      (into-array String ["b" "c"])]))))
+        (pr-str (into-array (Class/forName "[Ljava.lang.String;")
+                  [(into-array String ["a"])
+                   (into-array String ["b" "c"])]))))
 
-  (let [arr (read-string "#array ^String/2 [[\"a\"] [\"b\" \"c\"]]")]
-    (is (= String/2 (class arr)))
-    (is (= [["a"] ["b" "c"]] (mapv vec arr)))))
+  (print/if-clojure-version-gte "1.12.0"
+    (let [arr (read-string "#array ^String/2 [[\"a\"] [\"b\" \"c\"]]")]
+      (is (= (Class/forName "[[Ljava.lang.String;") (class arr)))
+      (is (= [["a"] ["b" "c"]] (mapv vec arr))))))
 
 (deftest atom-test
   (is (= "#atom 123" (pr-str (atom 123))))
@@ -316,15 +319,15 @@
   (is (= "#file \"/abc/x\\\"y\"" (pr-str (io/file "/abc/x\"y"))))
   (let [file (read-string "#file \"x\\\"y\"")]
     (is (instance? File file))
-    (is (= "x\"y" (File/.getPath file)))))
+    (is (= "x\"y" (.getPath ^File file)))))
 
 (deftest thread-test
   (let [t (Thread/currentThread)
         _ (is (re-matches #"\#thread \[\d+ \"[^\"]+\"\]" (pr-str t)))
 
         t (Thread. "the \"thread\"")
-        _ (is (= (str "#thread [" (print/if-version-gte 19 (.threadId t) (.getId t)) " \"the \\\"thread\\\"\"]") (pr-str t)))]
-    (print/if-version-gte 21
+        _ (is (= (str "#thread [" (print/if-java-version-gte 19 (.threadId t) (.getId t)) " \"the \\\"thread\\\"\"]") (pr-str t)))]
+    (print/if-java-version-gte 21
       (let [t (-> (Thread/ofVirtual)
                 (.name "abc")
                 (.start ^Runnable #(+ 1 2)))
@@ -339,7 +342,7 @@
         _  (is (= "#soft-ref #atom 123" (pr-str a)))
         a' (read-string "#soft-ref #atom 123")
         _  (is (instance? SoftReference a'))
-        _  (is (= 123 @(SoftReference/.get a')))]))
+        _  (is (= 123 @(.get ^SoftReference a')))]))
 
 (deftest weak-ref-test
   (let [o  (atom 123)
@@ -347,7 +350,7 @@
         _  (is (= "#weak-ref #atom 123" (pr-str a)))
         a' (read-string "#weak-ref #atom 123")
         _  (is (instance? WeakReference a'))
-        _  (is (= 123 @(WeakReference/.get a')))]))
+        _  (is (= 123 @(.get ^WeakReference a')))]))
 
 (deftest inet-address-test
   (let [a  (InetAddress/getByName "127.0.0.1")
@@ -520,21 +523,21 @@
   (is (= "#atomic-boolean false" (pr-str (AtomicBoolean. false))))
   (let [a' (read-string "#atomic-boolean false")]
     (is (instance? AtomicBoolean a'))
-    (is (= false (AtomicBoolean/.get a')))))
+    (is (= false (.get ^AtomicBoolean a')))))
 
 (deftest atomic-int-test
   (let [a  (AtomicInteger. 123)
         _  (is (= "#atomic-int 123" (pr-str a)))
         a' (read-string "#atomic-int 123")
         _  (is (instance? AtomicInteger a'))
-        _  (is (= 123 (AtomicInteger/.get a')))]))
+        _  (is (= 123 (.get ^AtomicInteger a')))]))
 
 (deftest atomic-long-test
   (let [a  (AtomicLong. 123)
         _  (is (= "#atomic-long 123" (pr-str a)))
         a' (read-string "#atomic-long 123")
         _  (is (instance? AtomicLong a'))
-        _  (is (= 123 (AtomicLong/.get a')))]))
+        _  (is (= 123 (.get ^AtomicLong a')))]))
 
 (deftest atomic-ref-test
   (let [o  (atom 123)
@@ -542,46 +545,46 @@
         _  (is (= "#atomic-ref #atom 123" (pr-str a)))
         a' (read-string "#atomic-ref #atom 123")
         _  (is (instance? AtomicReference a'))
-        _  (is (= 123 @(AtomicReference/.get a')))]))
+        _  (is (= 123 @(.get ^AtomicReference a')))]))
 
 (deftest atomic-ints-test
   (let [a  (AtomicIntegerArray. (int-array []))
         _  (is (= "#atomic-ints []" (pr-str a)))
         a' (read-string "#atomic-ints []")
         _  (is (instance? AtomicIntegerArray a'))
-        _  (is (= 0 (AtomicIntegerArray/.length a')))
+        _  (is (= 0 (.length ^AtomicIntegerArray a')))
 
         a  (AtomicIntegerArray. (int-array [1 2 3]))
         _  (is (= "#atomic-ints [1 2 3]" (pr-str a)))
         a' (read-string "#atomic-ints [1 2 3]")
         _  (is (instance? AtomicIntegerArray a'))
-        _  (is (= 3 (AtomicIntegerArray/.length a')))
-        _  (is (= 1 (AtomicIntegerArray/.get a' 0)))
-        _  (is (= 2 (AtomicIntegerArray/.get a' 1)))
-        _  (is (= 3 (AtomicIntegerArray/.get a' 2)))]))
+        _  (is (= 3 (.length ^AtomicIntegerArray a')))
+        _  (is (= 1 (.get ^AtomicIntegerArray a' 0)))
+        _  (is (= 2 (.get ^AtomicIntegerArray a' 1)))
+        _  (is (= 3 (.get ^AtomicIntegerArray a' 2)))]))
 
 (deftest atomic-longs-test
   (let [a  (AtomicLongArray. (long-array []))
         _  (is (= "#atomic-longs []" (pr-str a)))
         a' (read-string "#atomic-longs []")
         _  (is (instance? AtomicLongArray a'))
-        _  (is (= 0 (AtomicLongArray/.length a')))
+        _  (is (= 0 (.length ^AtomicLongArray a')))
 
         a  (AtomicLongArray. (long-array [1 2 3]))
         _  (is (= "#atomic-longs [1 2 3]" (pr-str a)))
         a' (read-string "#atomic-longs [1 2 3]")
         _  (is (instance? AtomicLongArray a'))
-        _  (is (= 3 (AtomicLongArray/.length a')))
-        _  (is (= 1 (AtomicLongArray/.get a' 0)))
-        _  (is (= 2 (AtomicLongArray/.get a' 1)))
-        _  (is (= 3 (AtomicLongArray/.get a' 2)))]))
+        _  (is (= 3 (.length ^AtomicLongArray a')))
+        _  (is (= 1 (.get ^AtomicLongArray a' 0)))
+        _  (is (= 2 (.get ^AtomicLongArray a' 1)))
+        _  (is (= 3 (.get ^AtomicLongArray a' 2)))]))
 
 (deftest atomic-refs-test
   (let [a  (AtomicReferenceArray. ^objects (into-array Object []))
         _  (is (= "#atomic-refs []" (pr-str a)))
         a' (read-string "#atomic-refs []")
         _  (is (instance? AtomicReferenceArray a'))
-        _  (is (= 0 (AtomicReferenceArray/.length a')))
+        _  (is (= 0 (.length ^AtomicReferenceArray a')))
 
         o1 (atom 1)
         o2 (atom 2)
@@ -590,10 +593,10 @@
         _  (is (= "#atomic-refs [#atom 1 #atom 2 #atom 3]" (pr-str a)))
         a' (read-string "#atomic-refs [#atom 1 #atom 2 #atom 3]")
         _  (is (instance? AtomicReferenceArray a'))
-        _  (is (= 3 (AtomicReferenceArray/.length a')))
-        _  (is (= 1 @(AtomicReferenceArray/.get a' 0)))
-        _  (is (= 2 @(AtomicReferenceArray/.get a' 1)))
-        _  (is (= 3 @(AtomicReferenceArray/.get a' 2)))]))
+        _  (is (= 3 (.length ^AtomicReferenceArray a')))
+        _  (is (= 1 @(.get ^AtomicReferenceArray a' 0)))
+        _  (is (= 2 @(.get ^AtomicReferenceArray a' 1)))
+        _  (is (= 3 @(.get ^AtomicReferenceArray a' 2)))]))
 
 (deftest pprint-test
   (let [a [(atom 42) (io/file "/") (int-array [1 2 3])]

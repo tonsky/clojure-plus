@@ -1,6 +1,6 @@
 # WIP
 
-- Support Clojure 1.10.1+ #13
+- Support Clojure 1.10.1+ #13 #14
 
 # 1.4.0 - Apr 30, 2025
 
