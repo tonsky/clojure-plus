@@ -1,5 +1,6 @@
-# WIP
+# 1.4.1 - May 8, 2025
 
+- Fix special forms/macros handling in `#p` #11 #12
 - Support Clojure 1.10.1+ #13 #14
 
 # 1.4.0 - Apr 30, 2025
