@@ -9,10 +9,11 @@
 
 (defn eval [s]
   (let [sw  (StringWriter.)
-        res (binding [*out* sw]
+        res (binding [*ns*  (find-ns 'clojure+.hashp-test)
+                      *out* sw]
               (clojure.core/eval (read-string s)))]
     {:out (-> (str sw)
-            (str/replace #"(?<!\033)\[[^\]]+\]" "[<pos>]"))
+            (str/replace #"(?<!\033)\[[^\]]+:-?\d+\]" "[<pos>]"))
      :res res}))
 
 (defmacro with-hashp [opts & body]
@@ -72,3 +73,40 @@
 3
 "
           (:out (eval "#pp (+ #pp 1 #pp 2)"))))))
+
+(defmacro macro1 [x]
+  x)
+
+(defmacro macro2 [x y]
+  (list 'list x y))
+
+(deftest special-forms
+  (with-hashp {:color? false}
+    (testing "special forms"
+      (is (= {:res 1      :out "#p (if 1) [<pos>]\n1\n"}           (eval "(-> true #p (if 1))")))
+      (is (= {:res nil    :out "#p (if 1) [<pos>]\nnil\n"}         (eval "(-> false #p (if 1))")))
+      (is (= {:res 1      :out "#p (if true) [<pos>]\n1\n"}        (eval "(->> 1 #p (if true))")))
+      (is (= {:res nil    :out "#p (if false) [<pos>]\nnil\n"}     (eval "(->> 1 #p (if false))")))
+      (is (= {:res 1      :out "#p (if true 1 2) [<pos>]\n1\n"}    (eval "#p (if true 1 2)")))
+      (is (= {:res 2      :out "#p (if false 1 2) [<pos>]\n2\n"}   (eval "#p (if false 1 2)")))
+      (is (= {:res 1      :out "#p (if 1 2) [<pos>]\n1\n"}         (eval "(-> true #p (if 1 2))")))
+      (is (= {:res 2      :out "#p (if 1 2) [<pos>]\n2\n"}         (eval "(-> false #p (if 1 2))")))
+      (is (= {:res 1      :out "#p (if true 1) [<pos>]\n1\n"}      (eval "(->> 2 #p (if true 1))")))
+      (is (= {:res 2      :out "#p (if false 1) [<pos>]\n2\n"}     (eval "(->> 2 #p (if false 1))")))
+      (is (= {:res 1      :out "#p (let [x 1] x) [<pos>]\n1\n"}    (eval "#p (let [x 1] x)")))
+      )
+    (testing "fns with :inline"
+      (is (= {:res false  :out "#p (nil? 123) [<pos>]\nfalse\n"}   (eval "#p (nil? 123)")))
+      (is (= {:res false  :out "#p nil? [<pos>]\nfalse\n"}         (eval "(-> 123 #p nil?)")))
+      (is (= {:res false  :out "#p nil? [<pos>]\nfalse\n"}         (eval "(->> 123 #p nil?)")))
+      (is (= {:res false  :out "#p (nil?) [<pos>]\nfalse\n"}       (eval "(-> 123 #p (nil?))")))
+      (is (= {:res false  :out "#p (nil?) [<pos>]\nfalse\n"}       (eval "(->> 123 #p (nil?))"))))
+    (testing "macros"
+      (is (= {:res 123    :out "#p (macro1 123) [<pos>]\n123\n"}   (eval "#p (macro1 123)")))
+      (is (= {:res 123    :out "#p macro1 [<pos>]\n123\n"}         (eval "(-> 123 #p macro1)")))
+      (is (= {:res 123    :out "#p macro1 [<pos>]\n123\n"}         (eval "(->> 123 #p macro1)")))
+      (is (= {:res 123    :out "#p (macro1) [<pos>]\n123\n"}       (eval "(-> 123 #p (macro1))")))
+      (is (= {:res 123    :out "#p (macro1) [<pos>]\n123\n"}       (eval "(->> 123 #p (macro1))")))
+      (is (= {:res '(1 2) :out "#p (macro2 1 2) [<pos>]\n(1 2)\n"} (eval "#p (macro2 1 2)")))
+      (is (= {:res '(1 2) :out "#p (macro2 2) [<pos>]\n(1 2)\n"}   (eval "(-> 1 #p (macro2 2))")))
+      (is (= {:res '(1 2) :out "#p (macro2 1) [<pos>]\n(1 2)\n"}   (eval "(->> 2 #p (macro2 1))"))))))

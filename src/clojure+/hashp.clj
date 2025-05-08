@@ -5,7 +5,8 @@
    [clojure.walk :as walk]
    [clojure+.util :as util])
   (:import
-   [clojure.lang Compiler TaggedLiteral]))
+   [clojure.lang Compiler TaggedLiteral]
+   [java.util List]))
 
 (defn- default-config []
   {:symbol 'p
@@ -62,6 +63,64 @@
       (pprint/pprint res))
     res))
 
+(defn- arglists [sym]
+  (when sym
+    (or
+      (:arglists (meta (resolve sym)))
+      (condp = sym
+        'if    '([test then] [test then else])
+        'let*  '([bindings & body])
+        'def   '([sym] [sym init] [sym doc init])
+        'do    '([& exprs])
+        'quote '([form])
+        'var   '([sym])
+        'throw '([ex])
+        'try   '([& body])
+        nil))))
+
+(defn- arity-ok? [arglists arity]
+  (loop [arglists arglists]
+    (let [[arglist & rest] arglists]
+      (if (nil? arglist)
+        false
+        (let [i (.indexOf ^List arglist '&)]
+          (if (= -1 i)
+            (if (= (count arglist) arity)
+              true
+              (recur rest))
+            (if (>= arity i)
+              true
+              (recur rest))))))))
+
+(defn- form-ok? [form]
+  (cond
+    (and (seq? form) (#{'let 'let*} (first form)))
+    (vector? (second form))
+
+    (and (seq? form) (= 'var (first form)))
+    (symbol? (second form))
+
+    ;; TODO extra validate fn, def, defn etc
+
+    ;; special forms
+    (#{'if 'let 'let* 'def 'do 'quote 'var 'throw 'try} form)
+    false
+
+    ;; naked macros
+    (and (symbol? form) (some-> form resolve meta :macro))
+    false
+
+    (not (seq? form))
+    true
+
+    (not (symbol? (first form)))
+    true
+
+    :else
+    (let [sym   (first form)
+          arity (dec (count form))]
+      (arity-ok? (arglists sym) arity))))
+
 (defn- add-first [x form]
   (if (seq? form)
     (list* (first form) x (next form))
@@ -76,16 +135,21 @@
   (let [x-sym      (gensym "x")
         y-sym      (gensym "y")
         form-first (add-first x-sym form)
-        form-last  (add-last y-sym form)]
+        form-last  (add-last y-sym form)
+        error      (str "Something went wrong, can’t print " form)]
     `((fn
         ([_#]
-         (hashp-impl '~form ~form))
+         ~(if (form-ok? form)
+            `(hashp-impl '~form ~form)
+            `(throw (Exception. ~error))))
         ([~x-sym ~y-sym]
          (hashp-impl '~form
            (cond
-             (= ::undef ~x-sym) ~form-last
-             (= ::undef ~y-sym) ~form-first
-             :else              (throw (Exception. "Impossible!"))))))
+             ~@(when (form-ok? form-last)
+                 [`(= ::undef ~x-sym) form-last])
+             ~@(when (form-ok? form-first)
+                 [`(= ::undef ~y-sym) form-first])
+             :else (throw (Exception. ~error))))))
       ::undef)))
 
 (defn install!
