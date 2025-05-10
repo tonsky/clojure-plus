@@ -12,6 +12,18 @@ Add this to deps.edn:
 io.github.tonsky/clojure-plus {:mvn/version "1.4.1"}
 ```
 
+## Overview
+
+| Namespace | Purpose |
+| --------- | ------- |
+| [clojure+.core](#clojurecore)   | More advanced versions of `if+`, `when+`, `cond+` |
+| [clojure+.hashp](#clojurehashp) | `#p` debugging macro better than `println` |
+| [clojure+.print](#clojureprint) | Imrpoves printing of built-in datastructures and classes |
+| [clojure+.error](#clojureerror) | Imrpoves printing of exception stacktraces |
+| [clojure+.test](#clojuretest)   | Capture output of successful tests, improved reporting, unified `run` function |
+| [clojure+.core.server](#clojurecoreserver) | `start-server` with with better defaults, random port, `.port-file` |
+| [clojure+.walk](#clojurewalk)   | Same as `clojure.walk` but avoids duplicating data structures |
+
 ## clojure+.core
 
 ### if+
@@ -685,6 +697,30 @@ To enable `clojure+.test`, call:
 ```
 
 Note that `clojure+.test` does not replace `clojure.test`. It still relies on `clojure.test` to define tests with `deftest`, `is`, `use-fixtures` etc. `clojure+.test` simply enhances the reporting output of `clojure.test`.
+
+## clojure+.core.server
+
+This namespace provides a single function: `start-server`. Same as with Clojure equivalent, it starts socket server.
+
+Unlike Clojure, it:
+
+- supports better defaults (e.g. `:name` and `:accept` that you rarely change),
+- can select random port,
+- outputs selected port to `.port-file` (similar to what nREPL does),
+- and prints a log message when server is started.
+
+Invoke from code or command-line:
+
+```sh
+[~] clj -X clojure.core.server/start-server
+Execution error (IllegalArgumentException) at clojure.core.server/required (server.clj:47).
+Additional data must be non-nil.
+
+[~] clj -X clojure+.core.server/start-server
+Started Server Socket REPL on port 47844
+```
+
+`clojure+.core.server/start-server` has enough defaults that it can be called without any options at all.
 
 ## clojure+.walk
 

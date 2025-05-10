@@ -1,3 +1,9 @@
+# WIP
+
+`clojure+.core.server`
+
+- Added `start-server`: start socket server with better defaults. Supports random port, port file, and log message when server is started.
+
 # 1.4.1 - May 8, 2025
 
 - Fix special forms/macros handling in `#p` #11 #12
