@@ -1,8 +1,14 @@
 # WIP
 
-`clojure+.core.server`
+`clojure+.core.server`:
 
 - Added `start-server`: start socket server with better defaults. Supports random port, port file, and log message when server is started.
+
+`clojure+.test`:
+
+- Add `:randomize?` option to `run`, true by default.
+- Optionally override `:capture-output?` through `run` options
+- Focus tests by setting `^:only` metadata to true
 
 # 1.4.1 - May 8, 2025
 

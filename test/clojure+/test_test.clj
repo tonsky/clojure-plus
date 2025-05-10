@@ -7,12 +7,23 @@
 
 (require 'clojure+.test :reload)
 
-(test+/install!)
 
 (defn f [x]
   x)
 
-(deftest out-test
+(deftest out-test-pass
+  (Thread/sleep 100)
+  (println "before")
+  (Thread/sleep 100)
+  (is (= 1 1))
+  (Thread/sleep 100)
+  (println "middle")
+  (Thread/sleep 100)
+  (is (= 2 2))
+  (Thread/sleep 100)
+  (println "after"))
+
+(deftest out-test-fail
   (Thread/sleep 100)
   (println "before")
   (Thread/sleep 100)
@@ -54,6 +65,12 @@
   (is (throw (ex-info "inside (is)" {:a 1})))
   (throw (ex-info "outside" {:b 2})))
 
+(deftest nested-exception-test
+  (testing "a"
+    (testing "b"
+      (testing "c"
+        (/ 1 0)))))
+
 (defn h []
   (throw (ex-info "Oops" {})))
 
@@ -63,10 +80,16 @@
 (deftest line-number-test
   (is (g)))
 
-#_(test+/run #'out-test)
-#_(test+/run #'equal-test)
-#_(test+/run #'not-test)
-#_(test+/run #'nesting-test)
-#_(test+/run #'exceptions-test)
-#_(test+/run #'line-number-test)
-(test+/run *ns*)
+(comment
+  (test+/install!)
+  (test+/run #'out-test-pass #'out-test-fail)
+  (test+/run {:capture-output? false} #'out-test-pass)
+  (test+/run {:capture-output? false} #'out-test-fail)
+  (test+/run #'equal-test)
+  (test+/run #'not-test)
+  (test+/run #'nesting-test)
+  (test+/run #'exceptions-test)
+  (test+/run #'nested-exception-test)
+  (test+/run #'line-number-test)
+  (test+/run {:capture-output? false} #'out-test-pass #'out-test-fail)
+  (test+/run {:randomize? false}))

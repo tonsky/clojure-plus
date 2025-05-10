@@ -32,7 +32,7 @@
 (defn- default-config []
   {:capture-output? true})
 
-(def config
+(def ^:dynamic config
   (default-config))
 
 (defn- capture-output []
@@ -134,7 +134,8 @@
         (println (str indent (if extra "├╴" "└╴") "missing: ") (pr-str missing)))
       (when extra
         (println (str indent "└╴extra:   ") (pr-str extra)))))
-  (flush-output)
+  (when (:capture-output? config)
+    (flush-output))
   (reset! *ns-failed? true))
 
 (defn- trace-transform [trace]
@@ -159,7 +160,8 @@
           (binding [error/*trace-transform* trace-transform]
             (println (str indent "└╴actual:"))
             (println (:actual m)))))))
-  (flush-output)
+  (when (:capture-output? config)
+    (flush-output))
   (reset! *ns-failed? true))
 
 (defn- report-summary [m]
@@ -266,12 +268,34 @@
   (.removeMethod ^MultiFn test/assert-expr 'not=)
   (.removeMethod ^MultiFn test/assert-expr 'not))
 
+(defn- ns-keyfn [ns]
+  (fn [[ns _]] (name (ns-name ns))))
+
+(defn- var-keyfn [var]
+  [(:line (meta var))
+   (name (:name (meta var)))])
+
 (defn run
   "Universal test runner that accepts everything: namespaces, vars, symbols,
    regexps. Replaces run-tests, run-all-tests, run-test-var, run-test.
+
+   First argument can be a map of options:
+
+     :randomize?       <bool> :: Whether to randomize test order or not.
+                                 True by deafult.
+     :capture-output?  <bool> :: Whether output of successful tests should be
+                                 silenced. Overrides :capture-output? from install!
+
+   Supports focusing tests: add ^:only to deftest var and only this test will run.
+
    If invoked with no arguments, runs all tests."
   [& args]
-  (let [vars (for [arg       (if (empty? args) (all-ns) args)
+  (let [[opts args] (if (map? (first args))
+                      [(first args) (next args)]
+                      [{} args])
+        {:keys [randomize? capture-output?]
+         :or {randomize? true}} opts
+        vars (for [arg       (if (empty? args) (all-ns) args)
                    var-or-ns (cond
                                (symbol? arg)
                                [(or
@@ -292,10 +316,15 @@
                                [var-or-ns])
                    :when     (:test (meta var))]
                var)
-        ns+vars (->> vars
-                  (group-by #(:ns (meta %)))
-                  (sort-by (fn [[ns _]] (name (ns-name ns)))))]
-    (binding [test/*report-counters* (ref test/*initial-report-counters*)]
+        focused-vars (filter #(:only (meta %)) vars)
+        vars         (or (not-empty focused-vars) vars)
+        ns+vars      (group-by #(:ns (meta %)) vars)
+        ns+vars      (if randomize?
+                       (shuffle (seq ns+vars))
+                       (sort-by ns-keyfn ns+vars))]
+    (binding [config                 (cond-> config
+                                       (some? capture-output?) (assoc :capture-output? capture-output?))
+              test/*report-counters* (ref test/*initial-report-counters*)]
       (doseq [[idx [ns vars]] (map vector (range) ns+vars)]
         (test/do-report {:type :begin-test-ns, :ns ns, :idx idx, :count (count ns+vars)})
         (try
@@ -303,8 +332,9 @@
                 each-fixture-fn (test/join-fixtures (::each-fixtures (meta ns)))]
             (once-fixture-fn
               (fn []
-                (doseq [v (->> vars
-                            (sort-by #(name (:name (meta %)))))]
+                (doseq [v (if randomize?
+                            (shuffle vars)
+                            (sort-by var-keyfn vars))]
                   (try
                     (each-fixture-fn
                       (fn []
