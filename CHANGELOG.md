@@ -1,4 +1,4 @@
-# WIP
+# 1.5.0 - May 10, 2025
 
 `clojure+.core.server`:
 

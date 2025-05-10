@@ -9,7 +9,7 @@ An ongoing project to improve experience of using Clojure stdlib.
 Add this to deps.edn:
 
 ```clojure
-io.github.tonsky/clojure-plus {:mvn/version "1.4.1"}
+io.github.tonsky/clojure-plus {:mvn/version "1.5.0"}
 ```
 
 ## Overview
