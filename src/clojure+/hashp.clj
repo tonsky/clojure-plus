@@ -117,9 +117,12 @@
     true
 
     :else
-    (let [sym   (first form)
-          arity (dec (count form))]
-      (arity-ok? (arglists sym) arity))))
+    (let [sym      (first form)
+          arity    (dec (count form))
+          arglists (arglists sym)]
+      (if arglists
+        (arity-ok? arglists arity)
+        true))))
 
 (defn- add-first [x form]
   (if (seq? form)

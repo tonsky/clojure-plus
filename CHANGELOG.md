@@ -1,3 +1,9 @@
+# 1.5.1 - Jun 4, 2025
+
+`clojure+.hashp`:
+
+- fix error printing dynamic fn invocations
+
 # 1.5.0 - May 10, 2025
 
 `clojure+.core.server`:
