@@ -7,7 +7,6 @@
 
 (require 'clojure+.test :reload)
 
-
 (defn f [x]
   x)
 
@@ -80,6 +79,25 @@
 (deftest line-number-test
   (is (g)))
 
+(deftest long-test []
+  (let [arr (repeatedly 100000 rand)]
+    (is (= (sort arr) (sort arr)))))
+
+(deftest interrupt-test []
+  (test+/install!)
+  (let [t (Thread.
+            (fn []
+              (test+/run #'long-test)
+              (recur)))]
+    (.setUncaughtExceptionHandler t
+      (reify Thread$UncaughtExceptionHandler
+        (uncaughtException [_ _ ex]
+          (println ex))))
+    (.start t)
+    (Thread/sleep 1000)
+    (.interrupt t)
+    (.join t)))
+
 (comment
   (test+/install!)
   (test+/run #'out-test-pass #'out-test-fail)
@@ -91,5 +109,7 @@
   (test+/run #'exceptions-test)
   (test+/run #'nested-exception-test)
   (test+/run #'line-number-test)
+  (clojure.test/test-var #'interrupt-test)
+  (.printStackTrace (InterruptedException.))
   (test+/run {:capture-output? false} #'out-test-pass #'out-test-fail)
   (test+/run {:randomize? false}))

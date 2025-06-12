@@ -1,3 +1,9 @@
+# WIP
+
+`clojure+.test`:
+
+- Tests run with `clojure+.test/run` can now be interrupted
+
 # 1.5.1 - Jun 4, 2025
 
 `clojure+.hashp`:

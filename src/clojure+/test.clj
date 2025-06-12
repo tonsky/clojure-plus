@@ -69,6 +69,16 @@
   (Var/.doReset #'system-err nil)
   (Var/.doReset #'system-out nil))
 
+(defn- inc-report-counter [name]
+  (condp instance? test/*report-counters*
+    clojure.lang.Ref
+    (dosync (commute test/*report-counters* update name (fnil inc 0)))
+
+    clojure.lang.Atom
+    (swap! test/*report-counters* update name (fnil inc 0))
+
+    :noop))
+
 (defn- report-begin-test-ns [m]
   (reset! *time-ns (System/currentTimeMillis))
   (compare-and-set! *time-total nil (System/currentTimeMillis))
@@ -116,10 +126,10 @@
 
 (defn- report-pass [m]
   (test/with-test-out
-    (test/inc-report-counter :pass)))
+    (inc-report-counter :pass)))
 
 (defn- report-fail [m]
-  (test/inc-report-counter :fail)
+  (inc-report-counter :fail)
   (test/with-test-out
     (println "FAIL in" (testing-vars-str m))
     (let [indent (print-testing-contexts)
@@ -145,7 +155,9 @@
     trace))
 
 (defn- report-error [m]
-  (test/inc-report-counter :error)
+  (when (instance? InterruptedException (:actual m))
+    (throw (:actual m)))
+  (inc-report-counter :error)
   (test/with-test-out
     (println "ERROR in" (testing-vars-str m))
     (let [indent (print-testing-contexts)]
@@ -268,12 +280,27 @@
   (.removeMethod ^MultiFn test/assert-expr 'not=)
   (.removeMethod ^MultiFn test/assert-expr 'not))
 
+(defn installed? []
+  (= report-summary (.getMethod ^MultiFn test/report :summary)))
+
 (defn- ns-keyfn [ns]
   (fn [[ns _]] (name (ns-name ns))))
 
 (defn- var-keyfn [var]
   [(:line (meta var))
    (name (:name (meta var)))])
+
+(defn- test-var [v]
+  (when-let [t (:test (meta v))]
+    (binding [test/*testing-vars* (conj test/*testing-vars* v)]
+      (test/do-report {:type :begin-test-var, :var v})
+      (inc-report-counter :test)
+      (try
+        (t)
+        (catch Throwable e
+          (test/do-report {:type :error, :message "Uncaught exception, not in assertion."
+                           :expected nil, :actual e})))
+      (test/do-report {:type :end-test-var, :var v}))))
 
 (defn run
   "Universal test runner that accepts everything: namespaces, vars, symbols,
@@ -324,29 +351,34 @@
                        (sort-by ns-keyfn ns+vars))]
     (binding [config                 (cond-> config
                                        (some? capture-output?) (assoc :capture-output? capture-output?))
-              test/*report-counters* (ref test/*initial-report-counters*)]
-      (doseq [[idx [ns vars]] (map vector (range) ns+vars)]
-        (test/do-report {:type :begin-test-ns, :ns ns, :idx idx, :count (count ns+vars)})
-        (try
-          (let [once-fixture-fn (test/join-fixtures (::once-fixtures (meta ns)))
-                each-fixture-fn (test/join-fixtures (::each-fixtures (meta ns)))]
-            (once-fixture-fn
-              (fn []
-                (doseq [v (if randomize?
-                            (shuffle vars)
-                            (sort-by var-keyfn vars))]
-                  (try
-                    (each-fixture-fn
-                      (fn []
-                        (test/test-var v)))
-                    (catch Throwable t
-                      (test/do-report {:type    :error
-                                       :message "Uncaught exception, not in assertion."
-                                       :actual  t})))))))
-          (catch Throwable t
-            (test/do-report {:type    :error
-                             :message "Uncaught exception, not in assertion."
-                             :actual  t})))
-        (test/do-report {:type :end-test-ns, :ns ns, :idx idx, :count (count ns+vars)}))
-      (test/do-report (assoc @test/*report-counters* :type :summary))
+              test/*report-counters* ((if (installed?) atom ref) test/*initial-report-counters*)]
+      (try
+        (doseq [[idx [ns vars]] (map vector (range) ns+vars)]
+          (test/do-report {:type :begin-test-ns, :ns ns, :idx idx, :count (count ns+vars)})
+          (try
+            (let [once-fixture-fn (test/join-fixtures (::once-fixtures (meta ns)))
+                  each-fixture-fn (test/join-fixtures (::each-fixtures (meta ns)))]
+              (once-fixture-fn
+                (fn []
+                  (doseq [v (if randomize?
+                              (shuffle vars)
+                              (sort-by var-keyfn vars))]
+                    (try
+                      (each-fixture-fn
+                        (fn []
+                          (when (and (installed?) (.isInterrupted (Thread/currentThread)))
+                            (throw (InterruptedException.)))
+                          (test-var v)))
+                      (catch Throwable t
+                        (test/do-report {:type    :error
+                                         :message "Uncaught exception, not in assertion."
+                                         :actual  t})))))))
+            (catch Throwable t
+              (test/do-report {:type    :error
+                               :message "Uncaught exception, not in assertion."
+                               :actual  t}))
+            (finally
+              (test/do-report {:type :end-test-ns, :ns ns, :idx idx, :count (count ns+vars)}))))
+        (finally
+          (test/do-report (assoc @test/*report-counters* :type :summary))))
       @test/*report-counters*)))
