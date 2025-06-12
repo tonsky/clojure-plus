@@ -3,9 +3,11 @@
   (:require
    [clojure.string :as str]
    [clojure.test :as test :refer [are deftest is testing use-fixtures]]
+   [clojure+.core :as core]
    [clojure+.hashp :as hashp])
   (:import
-   [java.io StringWriter]))
+   [java.io StringWriter]
+   [java.util Collections]))
 
 (defn eval [s]
   (let [sw  (StringWriter.)
@@ -110,3 +112,58 @@
       (is (= {:res '(1 2) :out "#p (macro2 1 2) [<pos>]\n(1 2)\n"} (eval "#p (macro2 1 2)")))
       (is (= {:res '(1 2) :out "#p (macro2 2) [<pos>]\n(1 2)\n"}   (eval "(-> 1 #p (macro2 2))")))
       (is (= {:res '(1 2) :out "#p (macro2 1) [<pos>]\n(1 2)\n"}   (eval "(->> 2 #p (macro2 1))"))))))
+
+(deftest interop-test
+  (with-hashp {:color? false}
+    (testing "classes"
+      (is (= {:res String :out "#p String [<pos>]\njava.lang.String\n"}                 (eval "#p String")))
+      (is (= {:res String :out "#p java.lang.String [<pos>]\njava.lang.String\n"}       (eval "#p java.lang.String")))
+      (is (= {:res StringWriter :out "#p StringWriter [<pos>]\njava.io.StringWriter\n"} (eval "#p StringWriter")))
+      (core/if-clojure-version-gte "1.12.0"
+        (is (= "#p String/1 [<pos>]\njava.lang.String/1\n"                              (:out (eval "String/1"))))
+        (is (= "#p StringWriter/1 [<pos>]\njava.io.StringWriter/1\n"                    (:out (eval "StringWriter/1"))))))
+
+    (testing "static methods"
+      (is (= {:res [] :out "#p (Collections/emptyList) [<pos>]\n[]\n"}          (eval "#p (Collections/emptyList)")))
+      (is (= {:res [] :out "#p (. Collections emptyList) [<pos>]\n[]\n"}        (eval "#p (. Collections emptyList)")))
+      (is (= {:res [] :out "#p (. Collections (emptyList)) [<pos>]\n[]\n"}      (eval "#p (. Collections (emptyList))")))
+
+      (is (= {:res "1" :out "#p (String/valueOf 1) [<pos>]\n\"1\"\n"}           (eval "#p (String/valueOf 1)")))
+      (is (= {:res "1" :out "#p (. String valueOf 1) [<pos>]\n\"1\"\n"}         (eval "#p (. String valueOf 1)")))
+      (is (= {:res "1" :out "#p (. String (valueOf 1)) [<pos>]\n\"1\"\n"}       (eval "#p (. String (valueOf 1))")))
+
+      (is (= {:res "1.0" :out "#p (String/valueOf 1.0) [<pos>]\n\"1.0\"\n"}     (eval "#p (String/valueOf 1.0)")))
+      (is (= {:res "1.0" :out "#p (. String valueOf 1.0) [<pos>]\n\"1.0\"\n"}   (eval "#p (. String valueOf 1.0)")))
+      (is (= {:res "1.0" :out "#p (. String (valueOf 1.0)) [<pos>]\n\"1.0\"\n"} (eval "#p (. String (valueOf 1.0))"))))
+
+    (testing "static fields"
+      (is (= {:res 5 :out "#p Thread/NORM_PRIORITY [<pos>]\n5\n"}     (eval "#p Thread/NORM_PRIORITY")))
+      (is (= {:res 5 :out "#p (. Thread NORM_PRIORITY) [<pos>]\n5\n"} (eval "#p (. Thread NORM_PRIORITY)"))))
+
+    (testing "instance members"
+      (is (= {:res "bc" :out "#p (.substring \"abc\" 1) [<pos>]\n\"bc\"\n"}        (eval "#p (.substring \"abc\" 1)")))
+      (is (= {:res "bc" :out "#p (String/.substring \"abc\" 1) [<pos>]\n\"bc\"\n"} (eval "#p (String/.substring \"abc\" 1)")))
+      (is (= {:res "bc" :out "#p (. \"abc\" substring 1) [<pos>]\n\"bc\"\n"}       (eval "#p (. \"abc\" substring 1)")))
+      (is (= {:res "bc" :out "#p (. \"abc\" (substring 1)) [<pos>]\n\"bc\"\n"}     (eval "#p (. \"abc\" (substring 1))")))
+
+      (is (= {:res "b" :out "#p (.substring \"abc\" 1 2) [<pos>]\n\"b\"\n"}        (eval "#p (.substring \"abc\" 1 2)")))
+      (is (= {:res "b" :out "#p (String/.substring \"abc\" 1 2) [<pos>]\n\"b\"\n"} (eval "#p (String/.substring \"abc\" 1 2)")))
+      (is (= {:res "b" :out "#p (. \"abc\" substring 1 2) [<pos>]\n\"b\"\n"}       (eval "#p (. \"abc\" substring 1 2)")))
+      (is (= {:res "b" :out "#p (. \"abc\" (substring 1 2)) [<pos>]\n\"b\"\n"}     (eval "#p (. \"abc\" (substring 1 2))"))))
+
+    (testing "instance fields"
+      (is (= {:res 1 :out "#p (.-x (java.awt.Point. 1 2)) [<pos>]\n1\n"}  (eval "#p (.-x (java.awt.Point. 1 2))")))
+      (is (= {:res 1 :out "#p (.x (java.awt.Point. 1 2)) [<pos>]\n1\n"}   (eval "#p (.x (java.awt.Point. 1 2))")))
+      (is (= {:res 1 :out "#p (. (java.awt.Point. 1 2) -x) [<pos>]\n1\n"} (eval "#p (. (java.awt.Point. 1 2) -x)")))
+      (is (= {:res 1 :out "#p (. (java.awt.Point. 1 2) x) [<pos>]\n1\n"}  (eval "#p (. (java.awt.Point. 1 2) x)"))))
+
+    (testing "constructors"
+      (is (= {:res 1 :out "#p (Long. 1) [<pos>]\n1\n"}    (eval "#p (Long. 1)")))
+      (is (= {:res 1 :out "#p (new Long 1) [<pos>]\n1\n"} (eval "#p (new Long 1)")))
+      (core/if-clojure-version-gte "1.12.0"
+        (is (= {:res 1 :out "#p (Long/new 1) [<pos>]\n1\n"} (eval "#p (Long/new 1)"))))
+
+      (is (= {:res 1 :out "#p (Long. \"1\") [<pos>]\n1\n"}    (eval "#p (Long. \"1\")")))
+      (is (= {:res 1 :out "#p (new Long \"1\") [<pos>]\n1\n"} (eval "#p (new Long \"1\")")))
+      (core/if-clojure-version-gte "1.12.0"
+        (is (= {:res 1 :out "#p (Long/new \"1\") [<pos>]\n1\n"} (eval "#p (Long/new \"1\")")))))))
