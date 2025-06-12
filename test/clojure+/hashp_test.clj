@@ -80,7 +80,7 @@
 (defmacro macro2 [x y]
   (list 'list x y))
 
-(deftest special-forms
+(deftest special-forms-test
   (with-hashp {:color? false}
     (testing "special forms"
       (is (= {:res 1      :out "#p (if 1) [<pos>]\n1\n"}           (eval "(-> true #p (if 1))")))

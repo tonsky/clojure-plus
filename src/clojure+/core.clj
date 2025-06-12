@@ -1,7 +1,35 @@
-(ns clojure+.core)
+(ns clojure+.core
+  (:require
+   [clojure.string :as str]))
 
 (declare ^:private ^:dynamic *if+-syms)
   
+(def ^:private runtime-version
+  (let [v (System/getProperty "java.version")]
+    (if (str/starts-with? v "1.")
+      (-> (str/split v #"\.") second Long/parseLong)
+      (-> (str/split v #"\.") first Long/parseLong))))
+
+(defmacro if-java-version-gte
+  ([version if-branch]
+   (when (<= version runtime-version)
+     if-branch))
+  ([version if-branch else-branch]
+   (if (<= version runtime-version)
+     if-branch
+     else-branch)))
+
+(defmacro if-clojure-version-gte
+  ([version if-branch]
+   `(if-clojure-version-gte ~version ~if-branch nil))
+  ([version if-branch else-branch]
+   (if (>= (compare
+            [(:major *clojure-version*) (:minor *clojure-version*) (:incremental *clojure-version* 0)]
+            (->> (str/split version #"\.") (mapv #(Long/parseLong %))))
+          0)
+     if-branch
+     else-branch)))
+
 (defn- if+-rewrite-cond-impl [cond]
   (clojure.core/cond
     (empty? cond)

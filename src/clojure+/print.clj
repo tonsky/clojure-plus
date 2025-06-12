@@ -2,7 +2,8 @@
   (:require
    [clojure.java.io :as io]
    [clojure.pprint :as pprint]
-   [clojure.string :as str])
+   [clojure.string :as str]
+   [clojure+.core :as core])
   (:import
    [clojure.lang AFunction Agent Atom ATransientSet Compiler Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue  PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Volatile]
    [java.io File Writer]
@@ -16,32 +17,6 @@
    [java.util List]
    [java.util.concurrent Future TimeUnit]
    [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
-
-(def runtime-version
-  (let [v (System/getProperty "java.version")]
-    (if (str/starts-with? v "1.")
-      (-> (str/split v #"\.") second Long/parseLong)
-      (-> (str/split v #"\.") first Long/parseLong))))
-
-(defmacro if-java-version-gte
-  ([version if-branch]
-   (when (<= version runtime-version)
-     if-branch))
-  ([version if-branch else-branch]
-   (if (<= version runtime-version)
-     if-branch
-     else-branch)))
-
-(defmacro if-clojure-version-gte
-  ([version if-branch]
-   `(if-clojure-version-gte ~version ~if-branch nil))
-  ([version if-branch else-branch]
-   (if (>= (compare
-            [(:major *clojure-version*) (:minor *clojure-version*) (:incremental *clojure-version* 0)]
-            (->> (str/split version #"\.") (mapv #(Long/parseLong %))))
-          0)
-     if-branch
-     else-branch)))
 
 (def ^:private *catalogue
   (atom #{}))
@@ -182,7 +157,7 @@
 (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'objects :read #'object-array})
 
 
-(if-clojure-version-gte "1.12.0"
+(core/if-clojure-version-gte "1.12.0"
   (defn read-array [vals]
     (let [class (:tag (meta vals))
           class (cond-> class
@@ -197,7 +172,7 @@
             x)))
       arr)))
 
-(if-clojure-version-gte "1.12.0"
+(core/if-clojure-version-gte "1.12.0"
   (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'array :read #'read-array}))
 
 
@@ -380,11 +355,11 @@
 ;; java.lang
 
 (defn print-thread [^Thread t ^Writer w]
-  (if-java-version-gte 21
+  (core/if-java-version-gte 21
     (when (.isVirtual t)
       (.write w "^:virtual ")))
   (.write w "#thread [")
-  (pr-on w (if-java-version-gte 19 (.threadId t) (.getId t)))
+  (pr-on w (core/if-java-version-gte 19 (.threadId t) (.getId t)))
   (.write w " ")
   (pr-on w (.getName t))
   (let [g (.getThreadGroup t)]
