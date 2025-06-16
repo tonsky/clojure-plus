@@ -120,8 +120,9 @@
       (is (= {:res String :out "#p java.lang.String [<pos>]\njava.lang.String\n"}       (eval "#p java.lang.String")))
       (is (= {:res StringWriter :out "#p StringWriter [<pos>]\njava.io.StringWriter\n"} (eval "#p StringWriter")))
       (core/if-clojure-version-gte "1.12.0"
-        (is (= "#p String/1 [<pos>]\njava.lang.String/1\n"                              (:out (eval "String/1"))))
-        (is (= "#p StringWriter/1 [<pos>]\njava.io.StringWriter/1\n"                    (:out (eval "StringWriter/1"))))))
+        (do
+          (is (= "#p String/1 [<pos>]\njava.lang.String/1\n"                              (:out (eval "#p String/1"))))
+          (is (= "#p StringWriter/1 [<pos>]\njava.io.StringWriter/1\n"                    (:out (eval "#p StringWriter/1")))))))
 
     (testing "static methods"
       (is (= {:res [] :out "#p (Collections/emptyList) [<pos>]\n[]\n"}          (eval "#p (Collections/emptyList)")))

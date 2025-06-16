@@ -4,6 +4,10 @@
 
 - Tests run with `clojure+.test/run` can now be interrupted
 
+`clojure+.hashp`:
+
+- Lazy `#p` evaluation, should fix all the compilation errors of invalid forms
+
 # 1.5.1 - Jun 4, 2025
 
 `clojure+.hashp`:

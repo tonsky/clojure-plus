@@ -63,67 +63,6 @@
       (pprint/pprint res))
     res))
 
-(defn- arglists [sym]
-  (when sym
-    (or
-      (:arglists (meta (resolve sym)))
-      (condp = sym
-        'if    '([test then] [test then else])
-        'let*  '([bindings & body])
-        'def   '([sym] [sym init] [sym doc init])
-        'do    '([& exprs])
-        'quote '([form])
-        'var   '([sym])
-        'throw '([ex])
-        'try   '([& body])
-        nil))))
-
-(defn- arity-ok? [arglists arity]
-  (loop [arglists arglists]
-    (let [[arglist & rest] arglists]
-      (if (nil? arglist)
-        false
-        (let [i (.indexOf ^List arglist '&)]
-          (if (= -1 i)
-            (if (= (count arglist) arity)
-              true
-              (recur rest))
-            (if (>= arity i)
-              true
-              (recur rest))))))))
-
-(defn- form-ok? [form]
-  (cond
-    (and (seq? form) (#{'let 'let*} (first form)))
-    (vector? (second form))
-
-    (and (seq? form) (= 'var (first form)))
-    (symbol? (second form))
-
-    ;; TODO extra validate fn, def, defn etc
-
-    ;; special forms
-    (#{'if 'let 'let* 'def 'do 'quote 'var 'throw 'try} form)
-    false
-
-    ;; naked macros
-    (and (symbol? form) (some-> form resolve meta :macro))
-    false
-
-    (not (seq? form))
-    true
-
-    (not (symbol? (first form)))
-    true
-
-    :else
-    (let [sym      (first form)
-          arity    (dec (count form))
-          arglists (arglists sym)]
-      (if arglists
-        (arity-ok? arglists arity)
-        true))))
-
 (defn- add-first [x form]
   (if (seq? form)
     (list* (first form) x (next form))
@@ -134,6 +73,13 @@
     (list* (concat form [x]))
     (list form x)))
 
+(defmacro local-eval [form]
+  `(eval
+     (list 'let [~@(for [k (keys &env)
+                         v [(list 'quote k) k]]
+                     v)]
+       (quote ~form))))
+
 (defn hashp [form]
   (let [x-sym      (gensym "x")
         y-sym      (gensym "y")
@@ -142,16 +88,12 @@
         error      (str "Something went wrong, can’t print " form)]
     `((fn
         ([_#]
-         ~(if (form-ok? form)
-            `(hashp-impl '~form ~form)
-            `(throw (Exception. ~error))))
+         (hashp-impl '~form (local-eval ~form)))
         ([~x-sym ~y-sym]
          (hashp-impl '~form
            (cond
-             ~@(when (form-ok? form-last)
-                 [`(= ::undef ~x-sym) form-last])
-             ~@(when (form-ok? form-first)
-                 [`(= ::undef ~y-sym) form-first])
+             (= ::undef ~x-sym) (local-eval ~form-last)
+             (= ::undef ~y-sym) (local-eval ~form-first)
              :else (throw (Exception. ~error))))))
       ::undef)))
 
