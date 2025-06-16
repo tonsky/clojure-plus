@@ -73,12 +73,20 @@
     (list* (concat form [x]))
     (list form x)))
 
-(defmacro local-eval [form]
-  `(eval
-     (list 'let [~@(for [k (keys &env)
-                         v [(list 'quote k) k]]
-                     v)]
-       (quote ~form))))
+(def ^:dynamic *env*)
+
+(defmacro local-eval
+  "Version of eval that quotes form & captures local bindings"
+  [form]
+  `(binding [*env* ~(into {}
+                      (for [k (keys &env)]
+                        [(list 'quote k) k]))]
+     (eval
+       (quote
+         (let [~@(for [k (keys &env)
+                       v [k `(get *env* (quote ~k))]]
+                   v)]
+           ~form)))))
 
 (defn hashp [form]
   (let [x-sym      (gensym "x")

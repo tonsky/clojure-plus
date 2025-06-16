@@ -167,4 +167,11 @@
       (is (= {:res 1 :out "#p (Long. \"1\") [<pos>]\n1\n"}    (eval "#p (Long. \"1\")")))
       (is (= {:res 1 :out "#p (new Long \"1\") [<pos>]\n1\n"} (eval "#p (new Long \"1\")")))
       (core/if-clojure-version-gte "1.12.0"
-        (is (= {:res 1 :out "#p (Long/new \"1\") [<pos>]\n1\n"} (eval "#p (Long/new \"1\")")))))))
+        (is (= {:res 1 :out "#p (Long/new \"1\") [<pos>]\n1\n"} (eval "#p (Long/new \"1\")")))))
+
+    (testing "non-serializable"
+      (is (= {:out "#p st [<pos>]\n[cls mthd \"file\" 0]\n"
+              :res (StackTraceElement. "cls" "mthd" "file" 0)}
+        (eval "(let [st (StackTraceElement. \"cls\" \"mthd\" \"file\" 0)]
+                 #p st)"))))
+    ))
