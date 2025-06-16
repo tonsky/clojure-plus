@@ -9,7 +9,7 @@ An ongoing project to improve experience of using Clojure stdlib.
 Add this to deps.edn:
 
 ```clojure
-io.github.tonsky/clojure-plus {:mvn/version "1.5.1"}
+io.github.tonsky/clojure-plus {:mvn/version "1.6.0"}
 ```
 
 ## Overview
@@ -682,11 +682,34 @@ ERROR in instant.db.instaql-test/some-test (Numbers.java:123)
   instant.db.instaql-test/fn     instaql_test.clj 2509
 ```
 
+Also, in case of uncaught exceptions, we report place _in test_ where it happened:
+
+```
+(defn f []
+  (throw (Exception.))) ;; <-- Clojure will report this
+
+(deftest t
+  (f)) ;; <-- we are reporting this
+
+(clojure+.test/run #'t)
+
+ERROR in file/t (file.clj:5) ;; <-- here
+└╴uncaught: ...
+```
+
+Default Clojure behavior is to print place where exception originated (which you can see in stack trace anyway) which makes it harder to understand which test condition is causing it.
+
 ### clojure+.test/run
 
 `clojure.test` provides four different functions to run tests: `run-tests`, `run-all-tests`, `run-test-var`, and `run-test`. It’s very confusing: how to remember which function does what?
 
 `clojure+.test` replaces all of these with a single function: `run`. This function accepts everything: symbols, vars, namespaces, and regexes. When called without arguments, it runs all tests.
+
+### Interrupts
+
+`clojure.test` test runs are not interruptible [CLJ-2909](https://clojure.atlassian.net/browse/CLJ-2909) [CLJ-2913](https://clojure.atlassian.net/browse/CLJ-2913).
+
+Running tests through `clojure+.test/run` makes them interruptible.
 
 ### Usage
 

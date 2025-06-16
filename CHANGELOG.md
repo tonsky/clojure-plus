@@ -1,4 +1,4 @@
-# WIP
+# 1.6.0 - Jun 16, 2025
 
 `clojure+.test`:
 
