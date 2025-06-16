@@ -1,6 +1,7 @@
 (ns clojure+.test
   (:require
    [clojure.data :as data]
+   [clojure.java.io :as io]
    [clojure.string :as str]
    [clojure.test :as test]
    [clojure+.error :as error])
@@ -128,6 +129,39 @@
   (test/with-test-out
     (inc-report-counter :pass)))
 
+(defn- file-and-line
+  "Finds line inside test that actually threw the exception. Like
+
+     (defn f []
+       (throw (Exception.)))
+
+     (deftest test
+       ((fn [x]
+          (let [y 2]
+            (f))) 1)) ;; <-- finds this line"
+  [stacktrace]
+  (let [test-var (last test/*testing-vars*)
+        file     (some-> (meta test-var) :file io/file .getName)
+        line     (some-> (meta test-var) :line)]
+    (when (and file line)
+      (when-some [trace (->> stacktrace
+                          reverse
+                          (drop-while
+                            (fn [^StackTraceElement el]
+                              (not=
+                                [file line]
+                                [(.getFileName el) (.getLineNumber el)])))
+                          not-empty)]
+        (let [cls (.getClassName ^StackTraceElement (first trace))]
+          (when-some [inside-trace (->> trace
+                                     (take-while
+                                       (fn [^StackTraceElement el]
+                                         (str/starts-with? (.getClassName el) cls)))
+                                     not-empty)]
+            (let [el ^StackTraceElement (last inside-trace)]
+              {:file (.getFileName el)
+               :line (.getLineNumber el)})))))))
+
 (defn- report-fail [m]
   (inc-report-counter :fail)
   (test/with-test-out
@@ -159,7 +193,8 @@
     (throw (:actual m)))
   (inc-report-counter :error)
   (test/with-test-out
-    (println "ERROR in" (testing-vars-str m))
+    (println "ERROR in" (testing-vars-str (merge m
+                                            (some-> (:actual m) (#(.getStackTrace ^Throwable %)) file-and-line))))
     (let [indent (print-testing-contexts)]
       (if (and (= "Uncaught exception, not in assertion." (:message m)) (nil? (:expected m)))
         (binding [error/*trace-transform* trace-transform]

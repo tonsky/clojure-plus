@@ -2,7 +2,8 @@
 
 `clojure+.test`:
 
-- Tests run with `clojure+.test/run` can now be interrupted
+- Tests run with `clojure+.test/run` can be interrupted
+- With uncaught exception, print line in test that caused it
 
 `clojure+.hashp`:
 

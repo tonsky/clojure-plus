@@ -76,8 +76,20 @@
 (defn g []
   (h))
 
-(deftest line-number-test
-  (is (g)))
+(deftest line-number-throw-test
+  ((fn [x]
+     (let [y 2]
+       (g))) 1))
+
+(deftest line-number-throw-test-2
+  ((fn [x]
+     (let [y 2]
+       (is (g)))) 1))
+
+(deftest line-number-is-test
+  ((fn [x]
+     (let [y 2]
+       (is (= x y)))) 1))
 
 (deftest long-test []
   (let [arr (repeatedly 100000 rand)]
@@ -108,8 +120,11 @@
   (test+/run #'nesting-test)
   (test+/run #'exceptions-test)
   (test+/run #'nested-exception-test)
-  (test+/run #'line-number-test)
+  (test+/run #'line-number-throw-test)   ;; line 82
+  (test+/run #'line-number-throw-test-2) ;; line 87
+  (test+/run #'line-number-is-test)      ;; line 92
   (clojure.test/test-var #'interrupt-test)
   (.printStackTrace (InterruptedException.))
   (test+/run {:capture-output? false} #'out-test-pass #'out-test-fail)
-  (test+/run {:randomize? false}))
+  (test+/run {:randomize? false})
+  (clojure+.hashp/install!))
