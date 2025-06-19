@@ -80,7 +80,8 @@
   [form]
   `(binding [*env* ~(into {}
                       (for [k (keys &env)]
-                        [(list 'quote k) k]))]
+                        [(list 'quote k) k]))
+             *ns*  (find-ns (quote ~(ns-name *ns*)))]
      (eval
        (quote
          (let [~@(for [k (keys &env)

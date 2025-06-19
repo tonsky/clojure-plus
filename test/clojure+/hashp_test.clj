@@ -175,3 +175,17 @@
         (eval "(let [st (StackTraceElement. \"cls\" \"mthd\" \"file\" 0)]
                  #p st)"))))
     ))
+
+(deftest ns-test
+  (with-hashp {:color? false}
+    (is (= {:out "#p (util/color?) [<pos>]\ntrue\n", :res true}
+          (eval
+            "(do
+               (in-ns 'clojure+.hashp)
+
+               (defn f []
+                 #p (util/color?))
+
+               (in-ns 'clojure+.hashp-test)
+
+               (clojure+.hashp/f))")))))

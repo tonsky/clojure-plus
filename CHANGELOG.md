@@ -1,3 +1,9 @@
+# 1.6.1 - Jun 19, 2025
+
+`clojure+.hashp`:
+
+- Fixed `#p` getting stuck on aliases from another namespace
+
 # 1.6.0 - Jun 16, 2025
 
 `clojure+.test`:
