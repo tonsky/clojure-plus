@@ -382,7 +382,7 @@
         vars         (or (not-empty focused-vars) vars)
         ns+vars      (group-by #(:ns (meta %)) vars)
         ns+vars      (if randomize?
-                       (shuffle (seq ns+vars))
+                       (shuffle (or (seq ns+vars) ()))
                        (sort-by ns-keyfn ns+vars))]
     (binding [config                 (cond-> config
                                        (some? capture-output?) (assoc :capture-output? capture-output?))
@@ -391,8 +391,8 @@
         (doseq [[idx [ns vars]] (map vector (range) ns+vars)]
           (test/do-report {:type :begin-test-ns, :ns ns, :idx idx, :count (count ns+vars)})
           (try
-            (let [once-fixture-fn (test/join-fixtures (::once-fixtures (meta ns)))
-                  each-fixture-fn (test/join-fixtures (::each-fixtures (meta ns)))]
+            (let [once-fixture-fn (test/join-fixtures (::test/once-fixtures (meta ns)))
+                  each-fixture-fn (test/join-fixtures (::test/each-fixtures (meta ns)))]
               (once-fixture-fn
                 (fn []
                   (doseq [v (if randomize?

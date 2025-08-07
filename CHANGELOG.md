@@ -1,3 +1,10 @@
+# 1.6.2 - Aug 7, 2025
+
+`clojure+.test`:
+
+- Exception if ns has no tests #17
+- `run` was not picking up fixtures #18
+
 # 1.6.1 - Jun 19, 2025
 
 `clojure+.hashp`:
