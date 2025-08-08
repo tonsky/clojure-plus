@@ -1,3 +1,9 @@
+# 1.6.3 - Aug 8, 2025
+
+`clojure+.test`:
+
+- Make it possible to call `is` in fixtures
+
 # 1.6.2 - Aug 7, 2025
 
 `clojure+.test`:

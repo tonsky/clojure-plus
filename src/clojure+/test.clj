@@ -55,12 +55,13 @@
 (defn- flush-output []
   (.flush System/out)
   (flush)
-  (binding [*out* clojure-test-out]
-    (when-not @*ns-failed?
-      (println)) ;; newline after "Testing <ns>..."
-    (print (str *buffer*))
-    (flush))
-  (.reset *buffer*))
+  (when (bound? #'*buffer*)
+    (binding [*out* clojure-test-out]
+      (when-not @*ns-failed?
+        (println)) ;; newline after "Testing <ns>..."
+      (print (str *buffer*))
+      (flush))
+    (.reset *buffer*)))
 
 (defn- restore-output []
   (pop-thread-bindings)
@@ -325,17 +326,24 @@
   [(:line (meta var))
    (name (:name (meta var)))])
 
-(defn- test-var [v]
+(defn- test-var [fixture v]
   (when-let [t (:test (meta v))]
     (binding [test/*testing-vars* (conj test/*testing-vars* v)]
       (test/do-report {:type :begin-test-var, :var v})
       (inc-report-counter :test)
       (try
-        (t)
+        (fixture
+         (fn []
+           (when (and (installed?) (.isInterrupted (Thread/currentThread)))
+             (throw (InterruptedException.)))
+           (t)))
         (catch Throwable e
-          (test/do-report {:type :error, :message "Uncaught exception, not in assertion."
-                           :expected nil, :actual e})))
-      (test/do-report {:type :end-test-var, :var v}))))
+          (test/do-report {:type     :error
+                           :message  "Uncaught exception, not in assertion."
+                           :expected nil
+                           :actual   e})))
+      (test/do-report {:type :end-test-var
+                       :var v}))))
 
 (defn run
   "Universal test runner that accepts everything: namespaces, vars, symbols,
@@ -399,11 +407,7 @@
                               (shuffle vars)
                               (sort-by var-keyfn vars))]
                     (try
-                      (each-fixture-fn
-                        (fn []
-                          (when (and (installed?) (.isInterrupted (Thread/currentThread)))
-                            (throw (InterruptedException.)))
-                          (test-var v)))
+                      (test-var each-fixture-fn v)
                       (catch Throwable t
                         (test/do-report {:type    :error
                                          :message "Uncaught exception, not in assertion."
