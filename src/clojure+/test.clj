@@ -37,10 +37,10 @@
   (default-config))
 
 (defn- capture-output []
-  (Var/.doReset #'system-out System/out)
-  (Var/.doReset #'system-err System/err)
-  (Var/.doReset #'clojure-test-out test/*test-out*)
-  
+  (alter-var-root #'system-out (constantly System/out))
+  (alter-var-root #'system-err (constantly System/err))
+  (alter-var-root #'clojure-test-out (constantly test/*test-out*))
+
   (let [buffer (ByteArrayOutputStream.)
         ps     (PrintStream. buffer)
         out    (OutputStreamWriter. buffer)]
@@ -67,9 +67,9 @@
   (pop-thread-bindings)
   (System/setErr system-err)
   (System/setOut system-out)
-  (Var/.doReset #'clojure-test-out nil)
-  (Var/.doReset #'system-err nil)
-  (Var/.doReset #'system-out nil))
+  (alter-var-root #'clojure-test-out (constantly nil))
+  (alter-var-root #'system-err (constantly nil))
+  (alter-var-root #'system-out (constantly nil)))
 
 (defn- inc-report-counter [name]
   (condp instance? test/*report-counters*
@@ -294,13 +294,13 @@
 
 (defn install!
   "Improves output of clojure.test. Possible options:
-   
+
      :capture-output?  <bool> :: Whether output of successful tests should be
                                  silenced. True by default."
   ([]
    (install! {}))
   ([opts]
-   (.doReset #'config (merge (default-config) opts))
+   (alter-var-root #'config (constantly (merge (default-config) opts)))
    (doseq [[k m] patched-methods-report]
      (.addMethod ^MultiFn test/report k @m))
    (.addMethod ^MultiFn test/assert-expr '= assert-expr-=)

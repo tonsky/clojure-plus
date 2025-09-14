@@ -400,7 +400,7 @@
   ([]
    (install! {}))
   ([opts]
-   (.doReset #'config (merge (default-config) opts))
+   (alter-var-root #'config (constantly (merge (default-config) opts)))
    (.addMethod ^MultiFn print-method Throwable patched-print-method)))
 
 (defn uninstall!

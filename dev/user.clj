@@ -1,6 +1,7 @@
 (ns user
   (:require
    [clj-reload.core :as reload]
+   [clojure+.core :as core]
    [clojure.core.server :as server]
    [clojure.java.io :as io]
    [clojure.test :as test]))
@@ -42,9 +43,14 @@
         (test/do-report (assoc @test/*report-counters* :type :summary))
         @test/*report-counters*))))
 
+(def test-re
+  (core/if-not-bb
+    #"clojure\+\.(?!test-test$).*"
+    #"clojure\+\.(?!test-test$|print-test$|print$).*"))
+
 (defn test-all []
-  (run-tests #"clojure\+\.(?!test-test$).*"))
+  (run-tests test-re))
 
 (defn -test-main [_]
-  (let [{:keys [fail error]} (run-tests #"clojure\+\.(?!test-test$).*")]
+  (let [{:keys [fail error]} (run-tests test-re)]
     (System/exit (+ fail error))))

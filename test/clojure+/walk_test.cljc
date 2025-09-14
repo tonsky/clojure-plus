@@ -1,5 +1,6 @@
 (ns clojure+.walk-test
   (:require
+   [clojure+.core :as core]
    [clojure+.walk :as walk]
    [clojure.test :refer [is are deftest]]))
 
@@ -81,7 +82,9 @@
          4 5 [5] (list 4 [5])
          [1 2 {:a 3} (list 4 [5])]])))
 
-(defrecord Foo [a b c])
+(core/if-not-bb
+  ;; https://github.com/babashka/babashka/issues/1868
+  (defrecord Foo [a b c]))
 
 ; Checks that walk returns the correct result and type of collection
 (deftest test-walk
@@ -91,8 +94,10 @@
                (sorted-set-by > 1 2 3)
                {:a 1, :b 2, :c 3}
                (sorted-map-by > 1 10, 2 20, 3 30)
-               (->Foo 1 2 3)
-               (map->Foo {:a 1 :b 2 :c 3 :extra 4})]]
+               (core/if-not-bb
+                 (->Foo 1 2 3))
+               (core/if-not-bb
+                 (map->Foo {:a 1 :b 2 :c 3 :extra 4}))]]
     (doseq [c colls]
       (let [walked (walk/walk identity identity c)]
         (is (= c walked))
@@ -101,7 +106,8 @@
                 (reduce + (map (comp inc val) c))))
           (is (= (walk/walk inc #(reduce + %) c)
                 (reduce + (map inc c)))))
-        #?(:clj
+        #?(:bb nil ;; no .comparator
+           :clj
            (when (instance? clojure.lang.Sorted c)
              (is (= (.comparator ^clojure.lang.Sorted c)
                    (.comparator ^clojure.lang.Sorted walked)))))))))
@@ -118,7 +124,8 @@
     (is (= (list 2 3 4 :a "b" nil 5 6 7) list'))
     (is (list? list'))))
 
-(defrecord RM [a])
+(core/if-not-bb
+  (defrecord RM [a]))
 
 (deftest retain-meta
   (let [m {:foo true}]
@@ -128,4 +135,6 @@
       #{1 2}
       {1 2}
       (map inc (range 3))
-      (->RM 1))))
+      (core/if-not-bb
+        (->RM 1)
+        {}))))
