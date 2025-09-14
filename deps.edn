@@ -4,7 +4,7 @@
  {:dev
   {:extra-paths ["dev" "test"]
    :extra-deps
-   {io.github.tonsky/clj-reload {:mvn/version "0.9.4"}}
+   {io.github.tonsky/clj-reload {:mvn/version "1.0.0"}}
    :jvm-opts ["-ea"
               "-Dclojure.main.report=stderr"
               "-Duser.language=en"

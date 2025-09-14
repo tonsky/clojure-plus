@@ -122,7 +122,9 @@
       (core/if-clojure-version-gte "1.12.0"
         (do
           (is (= "#p String/1 [<pos>]\njava.lang.String/1\n"                              (:out (eval "#p String/1"))))
-          (is (= "#p StringWriter/1 [<pos>]\njava.io.StringWriter/1\n"                    (:out (eval "#p StringWriter/1")))))))
+          (core/if-not-bb
+            ;; not in bb
+            (is (= "#p StringWriter/1 [<pos>]\njava.io.StringWriter/1\n"                  (:out (eval "#p StringWriter/1"))))))))
 
     (testing "static methods"
       (is (= {:res [] :out "#p (Collections/emptyList) [<pos>]\n[]\n"}          (eval "#p (Collections/emptyList)")))
@@ -152,11 +154,13 @@
       (is (= {:res "b" :out "#p (. \"abc\" substring 1 2) [<pos>]\n\"b\"\n"}       (eval "#p (. \"abc\" substring 1 2)")))
       (is (= {:res "b" :out "#p (. \"abc\" (substring 1 2)) [<pos>]\n\"b\"\n"}     (eval "#p (. \"abc\" (substring 1 2))"))))
 
-    (testing "instance fields"
-      (is (= {:res 1 :out "#p (.-x (java.awt.Point. 1 2)) [<pos>]\n1\n"}  (eval "#p (.-x (java.awt.Point. 1 2))")))
-      (is (= {:res 1 :out "#p (.x (java.awt.Point. 1 2)) [<pos>]\n1\n"}   (eval "#p (.x (java.awt.Point. 1 2))")))
-      (is (= {:res 1 :out "#p (. (java.awt.Point. 1 2) -x) [<pos>]\n1\n"} (eval "#p (. (java.awt.Point. 1 2) -x)")))
-      (is (= {:res 1 :out "#p (. (java.awt.Point. 1 2) x) [<pos>]\n1\n"}  (eval "#p (. (java.awt.Point. 1 2) x)"))))
+    (core/if-not-bb
+      ;; no built-in classes with instance fields in bb
+      (testing "instance fields"
+        (is (= {:res 1 :out "#p (.-x (java.awt.Point. 1 2)) [<pos>]\n1\n"}  (eval "#p (.-x (java.awt.Point. 1 2))")))
+        (is (= {:res 1 :out "#p (.x (java.awt.Point. 1 2)) [<pos>]\n1\n"}   (eval "#p (.x (java.awt.Point. 1 2))")))
+        (is (= {:res 1 :out "#p (. (java.awt.Point. 1 2) -x) [<pos>]\n1\n"} (eval "#p (. (java.awt.Point. 1 2) -x)")))
+        (is (= {:res 1 :out "#p (. (java.awt.Point. 1 2) x) [<pos>]\n1\n"}  (eval "#p (. (java.awt.Point. 1 2) x)")))))
 
     (testing "constructors"
       (is (= {:res 1 :out "#p (Long. 1) [<pos>]\n1\n"}    (eval "#p (Long. 1)")))

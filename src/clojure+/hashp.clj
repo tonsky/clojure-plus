@@ -123,7 +123,7 @@
    (install! {}))
   ([opts]
    (let [config (merge (default-config) opts)
-         _      (.doReset #'config config)
+         _      (alter-var-root #'config (constantly config))
          sym    (:symbol config)]
      (alter-var-root #'*data-readers* assoc sym #'hashp)
      (when (thread-bound? #'*data-readers*)

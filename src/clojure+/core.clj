@@ -30,6 +30,16 @@
      if-branch
      else-branch)))
 
+(def bb? (System/getProperty "babashka.version"))
+
+(defmacro if-not-bb
+  ([if-branch]
+   `(if-not-bb ~if-branch nil))
+  ([if-branch else-branch]
+   (if (not bb?)
+     if-branch
+     else-branch)))
+
 (defn- if+-rewrite-cond-impl [cond]
   (clojure.core/cond
     (empty? cond)
