@@ -32,6 +32,11 @@
 
 (def bb? (System/getProperty "babashka.version"))
 
+(defmacro when-not-bb
+  [& body]
+  (when (not bb?)
+    `(do ~@body)))
+
 (defmacro if-not-bb
   ([if-branch]
    `(if-not-bb ~if-branch nil))

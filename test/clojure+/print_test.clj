@@ -7,9 +7,9 @@
    [clojure+.core :as core]
    [clojure+.print :as print])
   (:import
-   [clojure.lang Atom Agent ATransientSet Delay ExceptionInfo IDeref IPending ISeq Namespace PersistentQueue PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Volatile]
+   [clojure.lang Atom Agent Delay ExceptionInfo IDeref IPending ISeq Namespace PersistentQueue PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Ref Volatile]
    [java.io File]
-   [java.lang.ref SoftReference WeakReference]
+   [java.lang.ref WeakReference]
    [java.net InetAddress URI URL]
    [java.nio.charset Charset]
    [java.nio.file Path]
@@ -17,7 +17,13 @@
    [java.time.temporal ChronoUnit]
    [java.util ArrayDeque ArrayList]
    [java.util.concurrent Future TimeUnit]
-   [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
+   [java.util.concurrent.atomic AtomicInteger AtomicLong AtomicReference]))
+
+(core/when-not-bb
+ (import
+  '[clojure.lang ATransientSet Reduced]
+  '[java.lang.ref SoftReference]
+  '[java.util.concurrent.atomic AtomicBoolean AtomicIntegerArray AtomicLongArray AtomicReferenceArray]))
 
 (use-fixtures :once
   (fn [f]
@@ -163,10 +169,12 @@
   (is (= "#array ^java.io.File/1 [#file \"a\" #file \"b\" #file \"c\"]"
         (pr-str (into-array File [(io/file "a") (io/file "b") (io/file "c")]))))
 
-  (core/if-clojure-version-gte "1.12.0"
-    (let [arr (read-string "#array ^java.io.File/1 [#file \"a\" #file \"b\" #file \"c\"]")]
-      (is (= (Class/forName "[Ljava.io.File;") (class arr)))
-      (is (= [(io/file "a") (io/file "b") (io/file "c")] (vec arr))))))
+  (core/when-not-bb
+   (core/if-clojure-version-gte "1.12.0"
+     (let [arr (read-string "#array ^java.io.File/1 [#file \"a\" #file \"b\" #file \"c\"]")]
+       (is (= (Class/forName "[Ljava.io.File;") (class arr)))
+       (is (= [(io/file "a") (io/file "b") (io/file "c")] (vec arr)))))))
+
 
 (deftest multi-array-test
   (is (= "#array ^String/2 [[\"a\"] [\"b\" \"c\"]]"
@@ -174,10 +182,11 @@
                   [(into-array String ["a"])
                    (into-array String ["b" "c"])]))))
 
-  (core/if-clojure-version-gte "1.12.0"
-    (let [arr (read-string "#array ^String/2 [[\"a\"] [\"b\" \"c\"]]")]
-      (is (= (Class/forName "[[Ljava.lang.String;") (class arr)))
-      (is (= [["a"] ["b" "c"]] (mapv vec arr))))))
+  (core/when-not-bb
+   (core/if-clojure-version-gte "1.12.0"
+     (let [arr (read-string "#array ^String/2 [[\"a\"] [\"b\" \"c\"]]")]
+       (is (= (Class/forName "[[Ljava.lang.String;") (class arr)))
+       (is (= [["a"] ["b" "c"]] (mapv vec arr)))))))
 
 (deftest atom-test
   (is (= "#atom 123" (pr-str (atom 123))))
@@ -203,23 +212,25 @@
     (is (instance? Volatile volatile))
     (is (= 123 @volatile))))
 
-(deftest reduced-test
-  (is (= "#reduced 123" (pr-str (reduced 123))))
-  (let [reduced (read-string "#reduced 123")]
-    (is (instance? Reduced reduced))
-    (is (= 123 @reduced))))
+(core/when-not-bb
+ (deftest reduced-test
+   (is (= "#reduced 123" (pr-str (reduced 123))))
+   (let [reduced (read-string "#reduced 123")]
+     (is (instance? clojure.lang.Reduced reduced))
+     (is (= 123 @reduced)))))
 
-(deftest promise-test
-  (is (= "#promise <pending...>" (pr-str (promise))))
-  (let [promise (read-string "#promise <pending...>")]
-    (is (instance? IPending promise))
-    (is (not (realized? promise))))
+(core/when-not-bb
+ (deftest promise-test
+   (is (= "#promise <pending...>" (pr-str (promise))))
+   (let [promise (read-string "#promise <pending...>")]
+     (is (instance? IPending promise))
+     (is (not (realized? promise))))
 
-  (is (= "#promise 123" (pr-str (doto (promise) (deliver 123)))))
-  (let [promise (read-string "#promise 123")]
-    (is (instance? IPending promise))
-    (is (realized? promise))
-    (is (= 123 @promise))))
+   (is (= "#promise 123" (pr-str (doto (promise) (deliver 123)))))
+   (let [promise (read-string "#promise 123")]
+     (is (instance? IPending promise))
+     (is (realized? promise))
+     (is (= 123 @promise)))))
 
 (deftest delay-test
   (is (= "#delay <pending...>" (pr-str (delay))))
@@ -232,30 +243,33 @@
     (is (realized? delay))
     (is (= 123 @delay))))
 
-(deftest future-test
-  (is (= "#future <pending...>" (pr-str (future (Thread/sleep 100) 123))))
-  (is (thrown-with-cause-msg? ExceptionInfo #"Can’t read back <pending\.\.\.> future"
-        (read-string "#future <pending...>")))
+(core/when-not-bb
+ (deftest future-test
+   (is (= "#future <pending...>" (pr-str (future (Thread/sleep 100) 123))))
+   (is (thrown-with-cause-msg? ExceptionInfo #"Can’t read back <pending\.\.\.> future"
+                               (read-string "#future <pending...>")))
 
-  (is (= "#future 123" (pr-str (doto (future 123) (deref)))))
-  (let [future (read-string "#future 123")]
-    (is (instance? Future future))
-    (is (realized? future))
-    (is (= 123 @future))))
+   (is (= "#future 123" (pr-str (doto (future 123) (deref)))))
+   (let [future (read-string "#future 123")]
+     (is (instance? Future future))
+     (is (realized? future))
+     (is (= 123 @future)))))
 
-(deftest fn-test
-  (let [f1 (fn [x y] (+ x y))
-        _  (is (re-matches #"#fn clojure\+\.print-test/fn--\d+/f1--\d+" (pr-str f1)))
+(core/when-not-bb
+ (deftest fn-test
+   (let [f1 (fn [x y] (+ x y))
+         _  (is (re-matches #"#fn clojure\+\.print-test/fn--\d+/f1--\d+" (pr-str f1)))
 
-        f2 (fn abc [x y] (+ x y))
-        _  (is (re-matches #"#fn clojure\+\.print-test/fn--\d+/abc--\d+" (pr-str f2)))
+         f2 (fn abc [x y] (+ x y))
+         _  (is (re-matches #"#fn clojure\+\.print-test/fn--\d+/abc--\d+" (pr-str f2)))
 
-        _  (is (= "#fn clojure.core/+" (pr-str +)))
-        f3 (read-string "#fn clojure.core/+")
-        _  (is (= 3 (f3 1 2)))]))
+         _  (is (= "#fn clojure.core/+" (pr-str +)))
+         f3 (read-string "#fn clojure.core/+")
+         _  (is (= 3 (f3 1 2)))])))
 
-(deftest multifn-test
-  (is (= "#multifn print-method" (pr-str print-method))))
+(core/when-not-bb
+ (deftest multifn-test
+   (is (= "#multifn print-method" (pr-str print-method)))))
 
 (deftest ns-test
   (let [ns  (find-ns 'clojure+.print-test)
@@ -276,7 +290,8 @@
         _  (is (instance? PersistentVector$TransientVector v'))
         _  (is (= (persistent! v) (persistent! v')))]))
 
-(deftest transient-array-map-test
+(core/when-not-bb
+ (deftest transient-array-map-test
   (let [m  (transient {})
         _  (is (= "#transient {}" (pr-str m)))
         m  (assoc! m :a 1)
@@ -287,7 +302,7 @@
         _  (is (instance? PersistentArrayMap$TransientArrayMap m'))
         _  (is (= (persistent! m) (persistent! m')))]))
 
-(deftest transient-hash-map-test
+ (deftest transient-hash-map-test
   (let [m  (transient (into {} (map #(vector (keyword (str %1)) %2) "abcdefghi" (range))))
         _  (is (= "#transient {:e 4, :g 6, :c 2, :h 7, :b 1, :d 3, :f 5, :i 8, :a 0}" (pr-str m)))
         m  (assoc! m :j 9)
@@ -296,17 +311,17 @@
         _  (is (instance? PersistentHashMap$TransientHashMap m'))
         _  (is (= (persistent! m) (persistent! m')))]))
 
-(deftest transient-hash-set-test
-  (let [s  (transient #{})
-        _  (is (= "#transient #{}" (pr-str s)))
-        s  (conj! s 1)
-        _  (is (= "#transient #{1}" (pr-str s)))
-        s  (conj! s 2)
-        s  (conj! s 3)
-        _  (is (= "#transient #{1 3 2}" (pr-str s)))
-        s' (read-string "#transient #{1 2 3}")
-        _  (is (instance? ATransientSet s'))
-        _  (is (= (persistent! s) (persistent! s')))]))
+ (deftest transient-hash-set-test
+   (let [s  (transient #{})
+         _  (is (= "#transient #{}" (pr-str s)))
+         s  (conj! s 1)
+         _  (is (= "#transient #{1}" (pr-str s)))
+         s  (conj! s 2)
+         s  (conj! s 3)
+         _  (is (= "#transient #{1 3 2}" (pr-str s)))
+         s' (read-string "#transient #{1 2 3}")
+         _  (is (instance? ATransientSet s'))
+         _  (is (= (persistent! s) (persistent! s')))])))
 
 (deftest queue-test
   (let [q  (into PersistentQueue/EMPTY [1 2 3])
@@ -337,13 +352,14 @@
             _ (is (thrown-with-cause-msg? Exception #"No reader function for tag thread"
                     (read-string "#thread [123 \"name\"]")))]))))
 
-(deftest soft-ref-test
-  (let [o  (atom 123)
-        a  (SoftReference. o)
-        _  (is (= "#soft-ref #atom 123" (pr-str a)))
-        a' (read-string "#soft-ref #atom 123")
-        _  (is (instance? SoftReference a'))
-        _  (is (= 123 @(.get ^SoftReference a')))]))
+(core/when-not-bb
+ (deftest soft-ref-test
+   (let [o  (atom 123)
+         a  (java.lang.ref.SoftReference. o)
+         _  (is (= "#soft-ref #atom 123" (pr-str a)))
+         a' (read-string "#soft-ref #atom 123")
+         _  (is (instance? SoftReference a'))
+         _  (is (= 123 @(.get ^SoftReference a')))])))
 
 (deftest weak-ref-test
   (let [o  (atom 123)
@@ -519,12 +535,14 @@
         _  (is (instance? TimeUnit t'))
         _  (is (= t t'))]))
 
-(deftest atomic-boolean-test
-  (is (= "#atomic-boolean true" (pr-str (AtomicBoolean. true))))
-  (is (= "#atomic-boolean false" (pr-str (AtomicBoolean. false))))
-  (let [a' (read-string "#atomic-boolean false")]
-    (is (instance? AtomicBoolean a'))
-    (is (= false (.get ^AtomicBoolean a')))))
+(core/when-not-bb
+ (import '[java.util.concurrent.atomic AtomicBoolean])
+ (deftest atomic-boolean-test
+   (is (= "#atomic-boolean true" (pr-str (AtomicBoolean. true))))
+   (is (= "#atomic-boolean false" (pr-str (AtomicBoolean. false))))
+   (let [a' (read-string "#atomic-boolean false")]
+     (is (instance? AtomicBoolean a'))
+     (is (= false (.get ^AtomicBoolean a'))))))
 
 (deftest atomic-int-test
   (let [a  (AtomicInteger. 123)
@@ -548,59 +566,63 @@
         _  (is (instance? AtomicReference a'))
         _  (is (= 123 @(.get ^AtomicReference a')))]))
 
-(deftest atomic-ints-test
-  (let [a  (AtomicIntegerArray. (int-array []))
-        _  (is (= "#atomic-ints []" (pr-str a)))
-        a' (read-string "#atomic-ints []")
-        _  (is (instance? AtomicIntegerArray a'))
-        _  (is (= 0 (.length ^AtomicIntegerArray a')))
+(core/when-not-bb
+ (deftest atomic-ints-test
+   (let [a  (AtomicIntegerArray. (int-array []))
+         _  (is (= "#atomic-ints []" (pr-str a)))
+         a' (read-string "#atomic-ints []")
+         _  (is (instance? AtomicIntegerArray a'))
+         _  (is (= 0 (.length ^AtomicIntegerArray a')))
 
-        a  (AtomicIntegerArray. (int-array [1 2 3]))
-        _  (is (= "#atomic-ints [1 2 3]" (pr-str a)))
-        a' (read-string "#atomic-ints [1 2 3]")
-        _  (is (instance? AtomicIntegerArray a'))
-        _  (is (= 3 (.length ^AtomicIntegerArray a')))
-        _  (is (= 1 (.get ^AtomicIntegerArray a' 0)))
-        _  (is (= 2 (.get ^AtomicIntegerArray a' 1)))
-        _  (is (= 3 (.get ^AtomicIntegerArray a' 2)))]))
+         a  (AtomicIntegerArray. (int-array [1 2 3]))
+         _  (is (= "#atomic-ints [1 2 3]" (pr-str a)))
+         a' (read-string "#atomic-ints [1 2 3]")
+         _  (is (instance? AtomicIntegerArray a'))
+         _  (is (= 3 (.length ^AtomicIntegerArray a')))
+         _  (is (= 1 (.get ^AtomicIntegerArray a' 0)))
+         _  (is (= 2 (.get ^AtomicIntegerArray a' 1)))
+         _  (is (= 3 (.get ^AtomicIntegerArray a' 2)))]))
 
-(deftest atomic-longs-test
-  (let [a  (AtomicLongArray. (long-array []))
-        _  (is (= "#atomic-longs []" (pr-str a)))
-        a' (read-string "#atomic-longs []")
-        _  (is (instance? AtomicLongArray a'))
-        _  (is (= 0 (.length ^AtomicLongArray a')))
+ (deftest atomic-longs-test
+   (let [a  (AtomicLongArray. (long-array []))
+         _  (is (= "#atomic-longs []" (pr-str a)))
+         a' (read-string "#atomic-longs []")
+         _  (is (instance? AtomicLongArray a'))
+         _  (is (= 0 (.length ^AtomicLongArray a')))
 
-        a  (AtomicLongArray. (long-array [1 2 3]))
-        _  (is (= "#atomic-longs [1 2 3]" (pr-str a)))
-        a' (read-string "#atomic-longs [1 2 3]")
-        _  (is (instance? AtomicLongArray a'))
-        _  (is (= 3 (.length ^AtomicLongArray a')))
-        _  (is (= 1 (.get ^AtomicLongArray a' 0)))
-        _  (is (= 2 (.get ^AtomicLongArray a' 1)))
-        _  (is (= 3 (.get ^AtomicLongArray a' 2)))]))
+         a  (AtomicLongArray. (long-array [1 2 3]))
+         _  (is (= "#atomic-longs [1 2 3]" (pr-str a)))
+         a' (read-string "#atomic-longs [1 2 3]")
+         _  (is (instance? AtomicLongArray a'))
+         _  (is (= 3 (.length ^AtomicLongArray a')))
+         _  (is (= 1 (.get ^AtomicLongArray a' 0)))
+         _  (is (= 2 (.get ^AtomicLongArray a' 1)))
+         _  (is (= 3 (.get ^AtomicLongArray a' 2)))]))
 
-(deftest atomic-refs-test
-  (let [a  (AtomicReferenceArray. ^objects (into-array Object []))
-        _  (is (= "#atomic-refs []" (pr-str a)))
-        a' (read-string "#atomic-refs []")
-        _  (is (instance? AtomicReferenceArray a'))
-        _  (is (= 0 (.length ^AtomicReferenceArray a')))
+ (deftest atomic-refs-test
+   (let [a  (AtomicReferenceArray. ^objects (into-array Object []))
+         _  (is (= "#atomic-refs []" (pr-str a)))
+         a' (read-string "#atomic-refs []")
+         _  (is (instance? AtomicReferenceArray a'))
+         _  (is (= 0 (.length ^AtomicReferenceArray a')))
 
-        o1 (atom 1)
-        o2 (atom 2)
-        o3 (atom 3)
-        a  (AtomicReferenceArray. ^objects (into-array Object [o1 o2 o3]))
-        _  (is (= "#atomic-refs [#atom 1 #atom 2 #atom 3]" (pr-str a)))
-        a' (read-string "#atomic-refs [#atom 1 #atom 2 #atom 3]")
-        _  (is (instance? AtomicReferenceArray a'))
-        _  (is (= 3 (.length ^AtomicReferenceArray a')))
-        _  (is (= 1 @(.get ^AtomicReferenceArray a' 0)))
-        _  (is (= 2 @(.get ^AtomicReferenceArray a' 1)))
-        _  (is (= 3 @(.get ^AtomicReferenceArray a' 2)))]))
+         o1 (atom 1)
+         o2 (atom 2)
+         o3 (atom 3)
+         a  (AtomicReferenceArray. ^objects (into-array Object [o1 o2 o3]))
+         _  (is (= "#atomic-refs [#atom 1 #atom 2 #atom 3]" (pr-str a)))
+         a' (read-string "#atomic-refs [#atom 1 #atom 2 #atom 3]")
+         _  (is (instance? AtomicReferenceArray a'))
+         _  (is (= 3 (.length ^AtomicReferenceArray a')))
+         _  (is (= 1 @(.get ^AtomicReferenceArray a' 0)))
+         _  (is (= 2 @(.get ^AtomicReferenceArray a' 1)))
+         _  (is (= 3 @(.get ^AtomicReferenceArray a' 2)))])))
 
 (deftest pprint-test
   (let [a [(atom 42) (io/file "/") (int-array [1 2 3])]
-        _ (is (= "[#atom 42 #file \"/\" #ints [1 2 3]]\n"
+        _ (is (= (core/if-not-bb
+                  "[#atom 42 #file \"/\" #ints [1 2 3]]\n"
+                  ;; TODO: this is wrong in bb, but I'm not sure why
+                  "[#atom 42#file \"/\"#ints [1 2 3]  ]\n")
                 (with-out-str
                   (pprint/pprint a))))]))

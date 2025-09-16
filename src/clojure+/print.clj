@@ -5,9 +5,9 @@
    [clojure.string :as str]
    [clojure+.core :as core])
   (:import
-   [clojure.lang AFunction Agent Atom ATransientSet Compiler Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue  PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Volatile]
+   [clojure.lang AFunction Agent Atom Compiler Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue  PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Ref Volatile]
    [java.io File Writer]
-   [java.lang.ref SoftReference WeakReference]
+   [java.lang.ref WeakReference]
    [java.lang.reflect Field]
    [java.net InetAddress URI URL]
    [java.nio.charset Charset]
@@ -16,7 +16,14 @@
    [java.time.temporal ChronoUnit]
    [java.util List]
    [java.util.concurrent Future TimeUnit]
-   [java.util.concurrent.atomic AtomicBoolean AtomicInteger AtomicIntegerArray AtomicLong AtomicLongArray AtomicReference AtomicReferenceArray]))
+   [java.util.concurrent.atomic AtomicInteger AtomicLong AtomicReference]))
+
+(core/when-not-bb
+ ;; these classes don't exist in bb
+ (import
+  '[clojure.lang ATransientSet Reduced]
+  '[java.lang.ref SoftReference]
+  '[java.util.concurrent.atomic AtomicBoolean AtomicIntegerArray AtomicLongArray AtomicReferenceArray]))
 
 (def ^:private *catalogue
   (atom #{}))
@@ -118,11 +125,35 @@
 
 (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.String;") :print (make-print-array 'strings) :tag 'strings :read #'read-strings})
 
+;; copied from #'clojure.core/print-sequential
+(defn- print-sequential [^String begin, print-one, ^String sep, ^String end, sequence, ^Writer w]
+  (binding [*print-level* (and (not *print-dup*) *print-level* (dec *print-level*))]
+    (if (and *print-level* (neg? *print-level*))
+      (.write w "#")
+      (do
+        (.write w begin)
+        (when-let [xs (seq sequence)]
+          (if (and (not *print-dup*) *print-length*)
+            (loop [[x & xs] xs
+                   print-length *print-length*]
+              (if (zero? print-length)
+                (.write w "...")
+                (do
+                  (print-one x w)
+                  (when xs
+                    (.write w sep)
+                    (recur xs (dec print-length))))))
+            (loop [[x & xs] xs]
+              (print-one x w)
+              (when xs
+                (.write w sep)
+                (recur xs)))))
+        (.write w end)))))
 
 (defn- print-array [arr w]
   (let [cls (class arr)]
     (if (and cls (.isArray cls))
-      (@#'clojure.core/print-sequential "[" print-array " " "]" arr w)
+      (print-sequential "[" print-array " " "]" arr w)
       (pr-on w arr))))
 
 (defn array-type-str ^String [^Class cls]
@@ -156,24 +187,24 @@
 
 (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'objects :read #'object-array})
 
+(core/when-not-bb
+ (core/if-clojure-version-gte "1.12.0"
+   (defn read-array [vals]
+     (let [class (:tag (meta vals))
+           class (cond-> class
+                   (symbol? class) resolve)
+           base  (.getComponentType ^Class class)
+           arr   ^{:tag "[Ljava.lang.Object;"} (make-array base (count vals))]
+       (doseq [i (range (count vals))
+               :let [x (nth vals i)]]
+         (aset arr i
+           (if (.isArray base)
+             (read-array (vary-meta x assoc :tag base))
+             x)))
+       arr)))
 
-(core/if-clojure-version-gte "1.12.0"
-  (defn read-array [vals]
-    (let [class (:tag (meta vals))
-          class (cond-> class
-                  (symbol? class) resolve)
-          base  (.getComponentType ^Class class)
-          arr   ^{:tag "[Ljava.lang.Object;"} (make-array base (count vals))]
-      (doseq [i (range (count vals))
-              :let [x (nth vals i)]]
-        (aset arr i
-          (if (.isArray base)
-            (read-array (vary-meta x assoc :tag base))
-            x)))
-      arr)))
-
-(core/if-clojure-version-gte "1.12.0"
-  (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'array :read #'read-array}))
+ (core/if-clojure-version-gte "1.12.0"
+   (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'array :read #'read-array})))
 
 
 ;; refs
@@ -189,24 +220,26 @@
 (swap! *catalogue conj {:class Agent    :print (make-print-ref 'agent)    :tag 'agent    :read #'agent})
 (swap! *catalogue conj {:class Ref      :print (make-print-ref 'ref)      :tag 'ref      :read #'ref})
 (swap! *catalogue conj {:class Volatile :print (make-print-ref 'volatile) :tag 'volatile :read #'volatile!})
-(swap! *catalogue conj {:class Reduced  :print (make-print-ref 'reduced)  :tag 'reduced  :read #'reduced})
+(core/when-not-bb
+ (swap! *catalogue conj {:class clojure.lang.Reduced  :print (make-print-ref 'reduced)  :tag 'reduced  :read #'reduced}))
 
+(core/when-not-bb
+ ;; https://github.com/babashka/babashka/issues/1874
+ (defn print-promise [^IPending ref ^Writer w]
+   (.write w "#promise ")
+   (if (realized? ref)
+     (pr-on w @ref)
+     (.write w "<pending...>")))
 
-(defn print-promise [^IPending ref ^Writer w]
-  (.write w "#promise ")
-  (if (realized? ref)
-    (pr-on w @ref)
-    (.write w "<pending...>")))
+ (defn- read-promise [val]
+   (if (= '<pending...> val)
+     (promise)
+     (deliver (promise) val)))
 
-(defn- read-promise [val]
-  (if (= '<pending...> val)
-    (promise)
-    (deliver (promise) val)))
-
-(prefer IPending IDeref)
-(prefer ISeq IPending)
-(prefer List IPending)
-(swap! *catalogue conj {:class IPending :print print-promise :tag 'promise :read #'read-promise})
+ (prefer IPending IDeref)
+ (prefer ISeq IPending)
+ (prefer List IPending)
+ (swap! *catalogue conj {:class IPending :print print-promise :tag 'promise :read #'read-promise}))
 
 
 (defn print-delay [^Delay ref ^Writer w]
@@ -223,54 +256,55 @@
 
 (swap! *catalogue conj {:class Delay :print print-delay :tag 'delay :read #'read-delay})
 
+(core/when-not-bb
+ ;; https://github.com/babashka/babashka/issues/1874
+ (defn print-future [^Future ref ^Writer w]
+   (.write w "#future ")
+   (if (.isDone ref)
+     (pr-on w (.get ref))
+     (.write w "<pending...>")))
 
-(defn print-future [^Future ref ^Writer w]
-  (.write w "#future ")
-  (if (.isDone ref)
-    (pr-on w (.get ref))
-    (.write w "<pending...>")))
+ (defn- read-future [val]
+   (if (= '<pending...> val)
+     (throw (ex-info "Can’t read back <pending...> future" {}))
+     (doto (future val)
+       (deref))))
 
-(defn- read-future [val]
-  (if (= '<pending...> val)
-    (throw (ex-info "Can’t read back <pending...> future" {}))
-    (doto (future val)
-      (deref))))
-
-(prefer Future IPending)
-(prefer Future IDeref)
-(swap! *catalogue conj {:class Future :print print-future :tag 'future :read #'read-future})
+ (prefer Future IPending)
+ (prefer Future IDeref)
+ (swap! *catalogue conj {:class Future :print print-future :tag 'future :read #'read-future}))
 
 
 ;; #function
+(core/when-not-bb
+ (defn print-fn [^AFunction f ^Writer w]
+   (.write w "#fn ")
+   (.write w (-> f class .getName Compiler/demunge)))
 
-(defn print-fn [^AFunction f ^Writer w]
-  (.write w "#fn ")
-  (.write w (-> f class .getName Compiler/demunge)))
+ (defn read-fn [sym]
+   (let [cls  (-> sym str (str/split #"/") (->> (map #(munge %)) (str/join "$") Class/forName))
+         ctor (.getDeclaredConstructor cls (make-array Class 0))]
+     (if ctor
+       (.newInstance ctor (make-array Object 0))
+       (throw (ex-info "Can't read closures" {})))))
 
-(defn read-fn [sym]
-  (let [cls  (-> sym str (str/split #"/") (->> (map #(Compiler/munge %)) (str/join "$") Class/forName))
-        ctor (.getDeclaredConstructor cls (make-array Class 0))]
-    (if ctor
-      (.newInstance ctor (make-array Object 0))
-      (throw (ex-info "Can't read closures" {})))))
+ (swap! *catalogue conj {:class AFunction :print print-fn :tag 'fn :read #'read-fn}))
 
-(swap! *catalogue conj {:class AFunction :print print-fn :tag 'fn :read #'read-fn})
+(core/when-not-bb
+ (def ^:private ^Field multifn-name-field
+   (doto (.getDeclaredField MultiFn "name")
+     (.setAccessible true)))
 
+ (defn print-multifn [^MultiFn f ^Writer w]
+   (.write w "#multifn ")
+   (.write w ^String (.get multifn-name-field f)))
 
-(def ^:private ^Field multifn-name-field
-  (doto (.getDeclaredField MultiFn "name")
-    (.setAccessible true)))
-
-(defn print-multifn [^MultiFn f ^Writer w]
-  (.write w "#multifn ")
-  (.write w ^String (.get multifn-name-field f)))
-
-(swap! *catalogue conj {:class MultiFn :print print-multifn :tag 'multifn})
+ (swap! *catalogue conj {:class MultiFn :print print-multifn :tag 'multifn}))
 
 
 ;; #ns
 
-(defliteral Namespace .getName 'ns the-ns)
+(defliteral Namespace ns-name 'ns the-ns)
 
 
 ;; #transient
@@ -286,60 +320,60 @@
 
 (swap! *catalogue conj {:class PersistentVector$TransientVector :print #'print-transient-vector :tag 'transient :read #'transient})
 
+(core/when-not-bb
+ ;; .getDeclaredField does not exist in bb
+ (def ^:private ^Field array-map-array-field
+   (doto (.getDeclaredField PersistentArrayMap$TransientArrayMap "array")
+     (.setAccessible true)))
 
-(def ^:private ^Field array-map-array-field
-  (doto (.getDeclaredField PersistentArrayMap$TransientArrayMap "array")
-    (.setAccessible true)))
+ (defn print-transient-array-map [^PersistentArrayMap$TransientArrayMap m ^Writer w]
+   (let [cnt (count m)
+         arr ^objects (.get array-map-array-field m)]
+     (.write w "#transient {")
+     (dotimes [i cnt]
+       (pr-on w (aget arr (-> i (* 2))))
+       (.write w " ")
+       (pr-on w (aget arr (-> i (* 2) (+ 1))))
+       (when (< i (dec cnt))
+         (.write w ", ")))
+     (.write w "}")))
 
-(defn print-transient-array-map [^PersistentArrayMap$TransientArrayMap m ^Writer w]
-  (let [cnt (count m)
-        arr ^objects (.get array-map-array-field m)]
-    (.write w "#transient {")
-    (dotimes [i cnt]
-      (pr-on w (aget arr (-> i (* 2))))
-      (.write w " ")
-      (pr-on w (aget arr (-> i (* 2) (+ 1))))
-      (when (< i (dec cnt))
-        (.write w ", ")))
-    (.write w "}")))
-
-(swap! *catalogue conj {:class PersistentArrayMap$TransientArrayMap :print #'print-transient-array-map :tag 'transient :read #'transient})
-
-
-(def ^:private ^Field hash-map-edit-field
-  (doto (.getDeclaredField PersistentHashMap$TransientHashMap "edit")
-    (.setAccessible true)))
-
-(defn print-transient-hash-map [^PersistentHashMap$TransientHashMap m ^Writer w]
-  (let [edit       ^AtomicReference (.get hash-map-edit-field m)
-        edit-value (.get edit)
-        m'         (persistent! m)]
-    (.write w "#transient ")
-    (pr-on w m')
-    (.set edit edit-value)))
-
-(swap! *catalogue conj {:class PersistentHashMap$TransientHashMap :print #'print-transient-hash-map :tag 'transient :read #'transient})
+ (swap! *catalogue conj {:class PersistentArrayMap$TransientArrayMap :print #'print-transient-array-map :tag 'transient :read #'transient})
 
 
-(def ^:private ^Field set-impl-field
-  (doto (.getDeclaredField ATransientSet "impl")
-    (.setAccessible true)))
+ (def ^:private ^Field hash-map-edit-field
+   (doto (.getDeclaredField PersistentHashMap$TransientHashMap "edit")
+     (.setAccessible true)))
 
-(defn print-transient-set [^ATransientSet s ^Writer w]
-  (let [m          ^PersistentHashMap$TransientHashMap (.get set-impl-field s)
-        edit       ^AtomicReference (.get hash-map-edit-field m)
-        edit-value (.get edit)
-        m'         (persistent! m)
-        cnt        (count m')]
-    (.write w "#transient #{")
-    (doseq [[k idx] (map vector (keys m') (range))]
-      (pr-on w k)
-      (when (< idx (dec cnt))
-        (.write w " ")))
-    (.write w "}")
-    (.set edit edit-value)))
+ (defn print-transient-hash-map [^PersistentHashMap$TransientHashMap m ^Writer w]
+   (let [edit       ^AtomicReference (.get hash-map-edit-field m)
+         edit-value (.get edit)
+         m'         (persistent! m)]
+     (.write w "#transient ")
+     (pr-on w m')
+     (.set edit edit-value)))
 
-(swap! *catalogue conj {:class ATransientSet :print #'print-transient-set :tag 'transient :read #'transient})
+ (swap! *catalogue conj {:class PersistentHashMap$TransientHashMap :print #'print-transient-hash-map :tag 'transient :read #'transient})
+
+ (def ^:private ^Field set-impl-field
+   (doto (.getDeclaredField ATransientSet "impl")
+     (.setAccessible true)))
+
+ (defn print-transient-set [^ATransientSet s ^Writer w]
+   (let [m          ^PersistentHashMap$TransientHashMap (.get set-impl-field s)
+         edit       ^AtomicReference (.get hash-map-edit-field m)
+         edit-value (.get edit)
+         m'         (persistent! m)
+         cnt        (count m')]
+     (.write w "#transient #{")
+     (doseq [[k idx] (map vector (keys m') (range))]
+       (pr-on w k)
+       (when (< idx (dec cnt))
+         (.write w " ")))
+     (.write w "}")
+     (.set edit edit-value)))
+
+ (swap! *catalogue conj {:class ATransientSet :print #'print-transient-set :tag 'transient :read #'transient}))
 
 
 ;; #queue
@@ -373,7 +407,8 @@
 
 ;; java.lang.ref
 
-(defliteral SoftReference .get 'soft-ref SoftReference.)
+(core/when-not-bb
+ (defliteral SoftReference .get 'soft-ref SoftReference.))
 (defliteral WeakReference .get 'weak-ref WeakReference.)
 
 
@@ -430,51 +465,53 @@
 
 ;; java.util.concurrent.atomic
 
-(defliteral AtomicBoolean   .get 'atomic-boolean AtomicBoolean.)
+(core/when-not-bb
+ (defliteral AtomicBoolean   .get 'atomic-boolean AtomicBoolean.))
 (defliteral AtomicInteger   .get 'atomic-int     AtomicInteger.)
 (defliteral AtomicLong      .get 'atomic-long    AtomicLong.)
 (defliteral AtomicReference .get 'atomic-ref     AtomicReference.)
 
-(defn print-atomic-ints [^AtomicIntegerArray a ^Writer w]
-  (.write w "#atomic-ints [")
-  (dotimes [i (.length a)]
-    (.write w (str (.get a i)))
-    (when (< i (dec (.length a)))
-      (.write w " ")))
-  (.write w "]"))
+(core/when-not-bb
+ (defn print-atomic-ints [^AtomicIntegerArray a ^Writer w]
+   (.write w "#atomic-ints [")
+   (dotimes [i (.length a)]
+     (.write w (str (.get a i)))
+     (when (< i (dec (.length a)))
+       (.write w " ")))
+   (.write w "]"))
 
-(defn read-atomic-ints [xs]
-  (AtomicIntegerArray. (int-array xs)))
+ (defn read-atomic-ints [xs]
+   (AtomicIntegerArray. (int-array xs)))
 
-(swap! *catalogue conj {:class AtomicIntegerArray :print #'print-atomic-ints :tag 'atomic-ints :read #'read-atomic-ints})
-
-
-(defn print-atomic-longs [^AtomicLongArray a ^Writer w]
-  (.write w "#atomic-longs [")
-  (dotimes [i (.length a)]
-    (.write w (str (.get a i)))
-    (when (< i (dec (.length a)))
-      (.write w " ")))
-  (.write w "]"))
-
-(defn read-atomic-longs [xs]
-  (AtomicLongArray. (long-array xs)))
-
-(swap! *catalogue conj {:class AtomicLongArray :print #'print-atomic-longs :tag 'atomic-longs :read #'read-atomic-longs})
+ (swap! *catalogue conj {:class AtomicIntegerArray :print #'print-atomic-ints :tag 'atomic-ints :read #'read-atomic-ints})
 
 
-(defn print-atomic-refs [^AtomicReferenceArray a ^Writer w]
-  (.write w "#atomic-refs [")
-  (dotimes [i (.length a)]
-    (pr-on w (.get a i))
-    (when (< i (dec (.length a)))
-      (.write w " ")))
-  (.write w "]"))
+ (defn print-atomic-longs [^AtomicLongArray a ^Writer w]
+   (.write w "#atomic-longs [")
+   (dotimes [i (.length a)]
+     (.write w (str (.get a i)))
+     (when (< i (dec (.length a)))
+       (.write w " ")))
+   (.write w "]"))
 
-(defn read-atomic-refs [xs]
-  (AtomicReferenceArray. ^objects (into-array Object xs)))
+ (defn read-atomic-longs [xs]
+   (AtomicLongArray. (long-array xs)))
 
-(swap! *catalogue conj {:class AtomicReferenceArray :print #'print-atomic-refs :tag 'atomic-refs :read #'read-atomic-refs})
+ (swap! *catalogue conj {:class AtomicLongArray :print #'print-atomic-longs :tag 'atomic-longs :read #'read-atomic-longs})
+
+
+ (defn print-atomic-refs [^AtomicReferenceArray a ^Writer w]
+   (.write w "#atomic-refs [")
+   (dotimes [i (.length a)]
+     (pr-on w (.get a i))
+     (when (< i (dec (.length a)))
+       (.write w " ")))
+   (.write w "]"))
+
+ (defn read-atomic-refs [xs]
+   (AtomicReferenceArray. ^objects (into-array Object xs)))
+
+ (swap! *catalogue conj {:class AtomicReferenceArray :print #'print-atomic-refs :tag 'atomic-refs :read #'read-atomic-refs}))
 
 
 ;; install

@@ -46,7 +46,7 @@
 (def test-re
   (core/if-not-bb
     #"clojure\+\.(?!test-test$).*"
-    #"clojure\+\.(?!test-test$|print-test$|print$).*"))
+    #"clojure\+\.(?!test-test$).*"))
 
 (defn test-all []
   (run-tests test-re))
