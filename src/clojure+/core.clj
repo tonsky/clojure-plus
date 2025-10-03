@@ -30,7 +30,8 @@
      if-branch
      else-branch)))
 
-(def bb? (System/getProperty "babashka.version"))
+(def bb?
+  (System/getProperty "babashka.version"))
 
 (defmacro if-not-bb
   ([if-branch]

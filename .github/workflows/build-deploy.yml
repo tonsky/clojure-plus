@@ -33,7 +33,9 @@ jobs:
           cli: latest
           lein: latest
       
-      - run: ./script/test.sh
+      - run: ./script/test_clj.sh
+
+      - run: ./script/test_bb.sh
 
       - if: ${{ startsWith(github.ref, 'refs/tags/') }}
         name: Set version
