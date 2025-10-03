@@ -1,3 +1,9 @@
+# 1.7.0 - Oct 3, 2025
+
+Everything but `clojure+.print`:
+
+- Support babashka #19 #20 via @filipesilva
+
 # 1.6.3 - Aug 8, 2025
 
 `clojure+.test`:
