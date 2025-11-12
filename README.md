@@ -69,7 +69,7 @@ This will be quite inconvenient to solve using normal `if` and `let`, as it woul
   <else>)
 ```
 
-Another asymmetry is `and` vs `or`: `:let` only works insid top-level `and` condition.
+Another asymmetry is `and` vs `or`: `:let` only works inside top-level `and` condition.
 
 ### when+
 
@@ -273,7 +273,7 @@ To enable all this, just:
 (clojure+.print/install!)
 ```
 
-You can pass `:include`/`:exclude` options or choose to intall only readers or only printers:
+You can pass `:include`/`:exclude` options or choose to install only readers or only printers:
 
 ```clojure
 (clojure+.print/install-printers! {:include ['queue 'file]})
@@ -286,7 +286,7 @@ Note: this representation doesn't track identity. So printing `atom` and reading
 
 Technically, reader tags with no namespace are reserved by Clojure. I see two possible uses:
 
-1. Use them during development only. Install printers in `user.clj` and see your data clearly during REPL evaluations and debug output. That alone will get you 90% of the benefits already. Aestethics matters.
+1. Use them during development only. Install printers in `user.clj` and see your data clearly during REPL evaluations and debug output. That alone will get you 90% of the benefits already. Aesthetics matters.
 
 2. Fully commit and use reader tags while writing code. Potentially, new version of Clojure might introduce conflicting tags, so be aware of that. Maybe don’t do it in a library (something people might reuse), but in your own project? Why not? If Clojure breaks compatibility in the future, you can always clean it up and keep going.
 
@@ -747,7 +747,7 @@ Started Server Socket REPL on port 47844
 
 ## clojure+.walk
 
-A drop-in replacement for `clojure.walk` that does not recreate data structures if they didn’t change (result of transform funcion is `identical?`)
+A drop-in replacement for `clojure.walk` that does not recreate data structures if they didn’t change (result of transform function is `identical?`)
 
 Normally, `clojure.walk` will create new map from scratch and copy `:a 1, :b 2` to it:
 
