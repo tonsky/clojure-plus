@@ -1,6 +1,6 @@
 (ns clojure+.walk
   "Same as clojure.walk but does not recreate data structures if result
-   of transform funcion is identical")
+   of transform function is identical")
 
 #?(:clj
    (defn editable? [coll]
