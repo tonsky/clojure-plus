@@ -1,6 +1,6 @@
-# Clojure Plus
+<img src="./extras/logo.webp" width=830 height=465>
 
-> Clojure.core is great, but it can be greater!
+“Clojure.core is great, but it can be greater!”
 
 An ongoing project to improve experience of using Clojure stdlib.
 
