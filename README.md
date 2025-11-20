@@ -18,8 +18,8 @@ io.github.tonsky/clojure-plus {:mvn/version "1.7.0"}
 | --------- | ------- |
 | [clojure+.core](#clojurecore)   | More advanced versions of `if+`, `when+`, `cond+` |
 | [clojure+.hashp](#clojurehashp) | `#p` debugging macro better than `println` |
-| [clojure+.print](#clojureprint) | Imrpoves printing of built-in datastructures and classes |
-| [clojure+.error](#clojureerror) | Imrpoves printing of exception stacktraces |
+| [clojure+.print](#clojureprint) | Improves printing of built-in datastructures and classes |
+| [clojure+.error](#clojureerror) | Improves printing of exception stacktraces |
 | [clojure+.test](#clojuretest)   | Capture output, improved reporting, unified `run` function |
 | [clojure+.core.server](#clojurecoreserver) | `start-server` with with better defaults, random port, `.port-file` |
 | [clojure+.walk](#clojurewalk)   | Same as `clojure.walk` but avoids duplicating data structures |
