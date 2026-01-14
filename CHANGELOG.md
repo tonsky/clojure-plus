@@ -1,3 +1,7 @@
+# 1.7.1 - Jan 15, 2026
+
+- Rename clj-kondo hooks namespace to avoid clashes #26 via @FelipeCortez
+
 # 1.7.0 - Oct 3, 2025
 
 Everything but `clojure+.print`:
