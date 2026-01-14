@@ -1,4 +1,4 @@
-(ns ^:no-doc hooks.core
+(ns ^:no-doc clojure+.kondo-hooks
   "A clj-kondo hook to allow linting of `if+` macro."
   (:require
    [clj-kondo.hooks-api :as api]))
