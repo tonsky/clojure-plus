@@ -1,4 +1,4 @@
-# WIP
+# 1.7.2 - Java 26, 2026
 
 - Install print and hashp to all frames in dynamic var bindings #16
 - Fixed clojure+.test/run on ns with 0 tests #17
