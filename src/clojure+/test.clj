@@ -214,12 +214,13 @@
 
 (defn- report-summary [m]
   (test/with-test-out
-    (println "╶───╴")
-    (println "Ran" (:test m) "tests containing"
-      (+ (:pass m) (:fail m) (:error m)) "assertions"
-      "in" (- (System/currentTimeMillis) @*time-total) "ms.")
-    (println (:fail m) "failures," (:error m) "errors.")
-    (reset! *time-total nil)))
+    (let [now (System/currentTimeMillis)]
+      (println "╶───╴")
+      (println "Ran" (:test m) "tests containing"
+        (+ (:pass m) (:fail m) (:error m)) "assertions"
+        "in" (- now (or @*time-total now)) "ms.")
+      (println (:fail m) "failures," (:error m) "errors.")
+      (reset! *time-total nil))))
 
 (defn- assert-expr-= [msg form]
   (if (= 3 (count form))

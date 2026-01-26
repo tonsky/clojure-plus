@@ -127,4 +127,9 @@
   (.printStackTrace (InterruptedException.))
   (test+/run {:capture-output? false} #'out-test-pass #'out-test-fail)
   (test+/run {:randomize? false})
-  (clojure+.hashp/install!))
+  (clojure+.hashp/install!)
+
+  ;; issue-17
+  (require 'clojure+.core)
+  (test+/run 'clojure+.core)
+  )

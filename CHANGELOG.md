@@ -1,6 +1,7 @@
 # WIP
 
 - Install print and hashp to all frames in dynamic var bindings #16
+- Fixed clojure+.test/run on ns with 0 tests #17
 
 # 1.7.1 - Jan 15, 2026
 
