@@ -3,8 +3,8 @@
   (:require
    [clojure.string :as str]
    [clojure.test :as test :refer [are deftest is testing use-fixtures]]
-   [clojure+.core :as core]
-   [clojure+.hashp :as hashp])
+   [clojure+.hashp :as hashp]
+   [clojure+.util :as util])
   (:import
    [java.io StringWriter]
    [java.util Collections]))
@@ -119,10 +119,10 @@
       (is (= {:res String :out "#p String [<pos>]\njava.lang.String\n"}                 (eval "#p String")))
       (is (= {:res String :out "#p java.lang.String [<pos>]\njava.lang.String\n"}       (eval "#p java.lang.String")))
       (is (= {:res StringWriter :out "#p StringWriter [<pos>]\njava.io.StringWriter\n"} (eval "#p StringWriter")))
-      (core/if-clojure-version-gte "1.12.0"
+      (util/if-clojure-version-gte "1.12.0"
         (do
           (is (= "#p String/1 [<pos>]\njava.lang.String/1\n"                              (:out (eval "#p String/1"))))
-          (core/if-not-bb
+          (util/if-not-bb
             ;; not in bb
             (is (= "#p StringWriter/1 [<pos>]\njava.io.StringWriter/1\n"                  (:out (eval "#p StringWriter/1"))))))))
 
@@ -154,7 +154,7 @@
       (is (= {:res "b" :out "#p (. \"abc\" substring 1 2) [<pos>]\n\"b\"\n"}       (eval "#p (. \"abc\" substring 1 2)")))
       (is (= {:res "b" :out "#p (. \"abc\" (substring 1 2)) [<pos>]\n\"b\"\n"}     (eval "#p (. \"abc\" (substring 1 2))"))))
 
-    (core/if-not-bb
+    (util/if-not-bb
       ;; no built-in classes with instance fields in bb
       (testing "instance fields"
         (is (= {:res 1 :out "#p (.-x (java.awt.Point. 1 2)) [<pos>]\n1\n"}  (eval "#p (.-x (java.awt.Point. 1 2))")))
@@ -165,12 +165,12 @@
     (testing "constructors"
       (is (= {:res 1 :out "#p (Long. 1) [<pos>]\n1\n"}    (eval "#p (Long. 1)")))
       (is (= {:res 1 :out "#p (new Long 1) [<pos>]\n1\n"} (eval "#p (new Long 1)")))
-      (core/if-clojure-version-gte "1.12.0"
+      (util/if-clojure-version-gte "1.12.0"
         (is (= {:res 1 :out "#p (Long/new 1) [<pos>]\n1\n"} (eval "#p (Long/new 1)"))))
 
       (is (= {:res 1 :out "#p (Long. \"1\") [<pos>]\n1\n"}    (eval "#p (Long. \"1\")")))
       (is (= {:res 1 :out "#p (new Long \"1\") [<pos>]\n1\n"} (eval "#p (new Long \"1\")")))
-      (core/if-clojure-version-gte "1.12.0"
+      (util/if-clojure-version-gte "1.12.0"
         (is (= {:res 1 :out "#p (Long/new \"1\") [<pos>]\n1\n"} (eval "#p (Long/new \"1\")")))))
 
     (testing "non-serializable"

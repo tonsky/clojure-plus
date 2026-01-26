@@ -125,12 +125,8 @@
    (let [config (merge (default-config) opts)
          _      (alter-var-root #'config (constantly config))
          sym    (:symbol config)]
-     (alter-var-root #'*data-readers* assoc sym #'hashp)
-     (when (thread-bound? #'*data-readers*)
-       (set! *data-readers* (assoc *data-readers* sym #'hashp))))))
+     (util/rebind-dynamic *data-readers* assoc sym #'hashp))))
 
 (defn uninstall! []
   (let [sym (:symbol config)]
-    (alter-var-root #'*data-readers* dissoc sym)
-    (when (thread-bound? #'*data-readers*)
-      (set! *data-readers* (dissoc *data-readers* sym)))))
+    (util/rebind-dynamic *data-readers* dissoc sym)))

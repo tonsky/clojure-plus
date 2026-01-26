@@ -1,7 +1,7 @@
 (ns user
   (:require
    [clj-reload.core :as reload]
-   [clojure+.core :as core]
+   [clojure+.util :as util]
    [clojure.core.server :as server]
    [clojure.java.io :as io]
    [clojure.test :as test]))
@@ -44,7 +44,7 @@
         @test/*report-counters*))))
 
 (def test-re
-  (core/if-not-bb
+  (util/if-not-bb
     #"clojure\+\.(?!test-test$|kondo-hooks$).*"
     #"clojure\+\.(?!test-test$|kondo-hooks$|print-test$|print$).*"))
 

@@ -1,7 +1,7 @@
 (ns clojure+.walk-test
   (:require
-   [clojure+.core :as core]
    [clojure+.walk :as walk]
+   [clojure+.util :as util]
    [clojure.test :refer [is are deftest]]))
 
 (defn bump [form]
@@ -82,7 +82,7 @@
          4 5 [5] (list 4 [5])
          [1 2 {:a 3} (list 4 [5])]])))
 
-(core/if-not-bb
+(util/if-not-bb
   ;; https://github.com/babashka/babashka/issues/1868
   (defrecord Foo [a b c]))
 
@@ -94,9 +94,9 @@
                (sorted-set-by > 1 2 3)
                {:a 1, :b 2, :c 3}
                (sorted-map-by > 1 10, 2 20, 3 30)
-               (core/if-not-bb
+               (util/if-not-bb
                  (->Foo 1 2 3))
-               (core/if-not-bb
+               (util/if-not-bb
                  (map->Foo {:a 1 :b 2 :c 3 :extra 4}))]]
     (doseq [c colls]
       (let [walked (walk/walk identity identity c)]
@@ -124,7 +124,7 @@
     (is (= (list 2 3 4 :a "b" nil 5 6 7) list'))
     (is (list? list'))))
 
-(core/if-not-bb
+(util/if-not-bb
   (defrecord RM [a]))
 
 (deftest retain-meta
@@ -135,6 +135,6 @@
       #{1 2}
       {1 2}
       (map inc (range 3))
-      (core/if-not-bb
+      (util/if-not-bb
         (->RM 1)
         {}))))

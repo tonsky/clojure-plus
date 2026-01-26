@@ -4,8 +4,8 @@
    [clojure.pprint :as pprint]
    [clojure.string :as str]
    [clojure.test :as test :refer [are deftest is testing use-fixtures]]
-   [clojure+.core :as core]
-   [clojure+.print :as print])
+   [clojure+.print :as print]
+   [clojure+.util :as util])
   (:import
    [clojure.lang Atom Agent ATransientSet Delay ExceptionInfo IDeref IPending ISeq Namespace PersistentQueue PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Volatile]
    [java.io File]
@@ -163,7 +163,7 @@
   (is (= "#array ^java.io.File/1 [#file \"a\" #file \"b\" #file \"c\"]"
         (pr-str (into-array File [(io/file "a") (io/file "b") (io/file "c")]))))
 
-  (core/if-clojure-version-gte "1.12.0"
+  (util/if-clojure-version-gte "1.12.0"
     (let [arr (read-string "#array ^java.io.File/1 [#file \"a\" #file \"b\" #file \"c\"]")]
       (is (= (Class/forName "[Ljava.io.File;") (class arr)))
       (is (= [(io/file "a") (io/file "b") (io/file "c")] (vec arr))))))
@@ -174,7 +174,7 @@
                   [(into-array String ["a"])
                    (into-array String ["b" "c"])]))))
 
-  (core/if-clojure-version-gte "1.12.0"
+  (util/if-clojure-version-gte "1.12.0"
     (let [arr (read-string "#array ^String/2 [[\"a\"] [\"b\" \"c\"]]")]
       (is (= (Class/forName "[[Ljava.lang.String;") (class arr)))
       (is (= [["a"] ["b" "c"]] (mapv vec arr))))))
@@ -327,8 +327,8 @@
         _ (is (re-matches #"\#thread \[\d+ \"[^\"]+\"\]" (pr-str t)))
 
         t (Thread. "the \"thread\"")
-        _ (is (= (str "#thread [" (core/if-java-version-gte 19 (.threadId t) (.getId t)) " \"the \\\"thread\\\"\"]") (pr-str t)))]
-    (core/if-java-version-gte 21
+        _ (is (= (str "#thread [" (util/if-java-version-gte 19 (.threadId t) (.getId t)) " \"the \\\"thread\\\"\"]") (pr-str t)))]
+    (util/if-java-version-gte 21
       (let [t (-> (Thread/ofVirtual)
                 (.name "abc")
                 (.start ^Runnable #(+ 1 2)))

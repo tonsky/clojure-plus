@@ -3,9 +3,9 @@
    [clojure.java.io :as io]
    [clojure.pprint :as pprint]
    [clojure.string :as str]
-   [clojure+.core :as core])
+   [clojure+.util :as util])
   (:import
-   [clojure.lang AFunction Agent Atom ATransientSet Compiler Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue  PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Volatile]
+   [clojure.lang AFunction Agent Atom ATransientSet Compiler Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue  PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Var Volatile]
    [java.io File Writer]
    [java.lang.ref SoftReference WeakReference]
    [java.lang.reflect Field]
@@ -157,7 +157,7 @@
 (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'objects :read #'object-array})
 
 
-(core/if-clojure-version-gte "1.12.0"
+(util/if-clojure-version-gte "1.12.0"
   (defn read-array [vals]
     (let [class (:tag (meta vals))
           class (cond-> class
@@ -172,7 +172,7 @@
             x)))
       arr)))
 
-(core/if-clojure-version-gte "1.12.0"
+(util/if-clojure-version-gte "1.12.0"
   (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'array :read #'read-array}))
 
 
@@ -355,11 +355,11 @@
 ;; java.lang
 
 (defn print-thread [^Thread t ^Writer w]
-  (core/if-java-version-gte 21
+  (util/if-java-version-gte 21
     (when (.isVirtual t)
       (.write w "^:virtual ")))
   (.write w "#thread [")
-  (pr-on w (core/if-java-version-gte 19 (.threadId t) (.getId t)))
+  (pr-on w (util/if-java-version-gte 19 (.threadId t) (.getId t)))
   (.write w " ")
   (pr-on w (.getName t))
   (let [g (.getThreadGroup t)]
@@ -533,9 +533,7 @@
    (install-readers! {}))
   ([opts]
    (let [readers (data-readers opts)]
-     (alter-var-root #'*data-readers* merge readers)
-     (when (thread-bound? #'*data-readers*)
-       (set! *data-readers* (merge *data-readers* readers))))))
+     (util/rebind-dynamic *data-readers* merge readers))))
 
 (defn install!
   "Install both printers and readers for most of Clojure built-in data structures.
