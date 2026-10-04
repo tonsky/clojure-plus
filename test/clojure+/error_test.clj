@@ -1,5 +1,6 @@
 (ns clojure+.error-test
   (:require
+   [clojure.repl :as repl]
    [clojure.test :as test :refer [are deftest is testing use-fixtures]]
    [clojure+.error :as error])
   (:import
@@ -43,6 +44,12 @@
 
 (defn trace-transform [trace]
   (remove #(= "ThreadPoolExecutor.java" (:file %)) trace))
+
+(defmacro with-err-str [& body]
+  `(let [w# (java.io.StringWriter.)]
+     (binding [*err* w#]
+       ~@body)
+     (str w#)))
 
 (deftest humanly-nothing-test
   (error/install! {:color?           false
@@ -600,3 +607,64 @@ Caused by: \033[31mException:\033[0m Cause
  :message \"Cause\"
  :class   java.lang.Exception}"
         (with-out-str (pr effect)))))
+
+(deftest pst-test
+  (error/install! {:color? false})
+  (testing "exception"
+    (is (= "ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+  user/eval
+  ... 3 common elements
+Caused by: Exception: Cause
+  clojure-sublimed.core/track-vars*
+  clojure-sublimed.socket-repl/fork-eval/fn
+  clojure.core/binding-conveyor-fn/fn        core.clj 2047
+  ThreadPoolExecutor$Worker.run              ThreadPoolExecutor.java 642
+  Thread.run                                 Thread.java 1575
+"
+          (with-err-str (repl/pst effect)))))
+
+  (testing "exception + depth"
+    (is (= "ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+  user/eval
+  ... 3 common elements
+Caused by: Exception: Cause
+  clojure-sublimed.core/track-vars*
+  clojure-sublimed.socket-repl/fork-eval/fn
+"
+          (with-err-str (repl/pst effect 2)))))
+
+  (testing "root cause of *e"
+    (binding [*e effect]
+      (is (= "Exception: Cause
+  clojure-sublimed.core/track-vars*
+  clojure-sublimed.socket-repl/fork-eval/fn
+  clojure.core/binding-conveyor-fn/fn        core.clj 2047
+  ThreadPoolExecutor$Worker.run              ThreadPoolExecutor.java 642
+  Thread.run                                 Thread.java 1575
+"
+            (with-err-str (repl/pst))))
+      (is (= "Exception: Cause
+  clojure-sublimed.core/track-vars*
+  clojure-sublimed.socket-repl/fork-eval/fn
+"
+            (with-err-str (repl/pst 2))))))
+
+  (testing "no *e"
+    (binding [*e nil]
+      (is (= "" (with-err-str (repl/pst))))))
+
+  (testing "config"
+    (error/install! {:color? false, :reverse? true})
+    (is (= "
+  clojure-sublimed.socket-repl/fork-eval/fn
+  clojure-sublimed.core/track-vars*
+Caused by: Exception: Cause
+  ... 3 common elements
+  user/eval
+ExceptionInfo: Effect of \"Cause\" {:a 1, :b a \"string\"}
+"
+          (with-err-str (repl/pst effect 2)))))
+
+  (testing "uninstall!"
+    (error/uninstall!)
+    (is (= "Exception Cause\n" (with-err-str (repl/pst cause 0))))))

@@ -1,6 +1,7 @@
 (ns clojure+.error
   (:require
    [clojure.java.io :as io]
+   [clojure.repl :as repl]
    [clojure.stacktrace :as stacktrace]
    [clojure.string :as str]
    [clojure+.util :as util])
@@ -18,6 +19,9 @@
    :indent           2})
 
 (def ^:dynamic *trace-transform*
+  nil)
+
+(def ^:private ^:dynamic *depth*
   nil)
 
 (def config
@@ -89,12 +93,17 @@
                             n (dec (count prev-trace))]
                        (if (and (>= m 0) (>= n 0) (= (nth trace m) (nth prev-trace n)))
                          (recur (dec m) (dec n))
-                         (- (dec (count trace)) m))))))]
+                         (- (dec (count trace)) m))))))
+        common (or common 0)
+        trace  (if *depth*
+                 (let [[unique tail] (split-at (- (count trace) common) trace)]
+                   (concat (take *depth* unique) tail))
+                 trace)]
     {:message (.getMessage t)
      :class   (class t)
      :data    (ex-data t)
      :trace   trace
-     :common  (or common 0)
+     :common  common
      :cause   (some-> (.getCause t) datafy-throwable)}))
 
 (defn- ansi-red []
@@ -374,9 +383,25 @@
         (print-humanly-reverse w t)
         (print-humanly w t)))))
 
+(defonce ^:private clojure-pst
+  repl/pst)
+
+(defn- patched-pst
+  ([]
+   (patched-pst 12))
+  ([e-or-depth]
+   (if (instance? Throwable e-or-depth)
+     (patched-pst e-or-depth 12)
+     (when-some [e *e]
+       (patched-pst (util/if-not-bb (repl/root-cause e) (root-cause e)) e-or-depth))))
+  ([e depth]
+   (binding [*out*   *err*
+             *depth* depth]
+     (println e))))
+
 (defn install!
   "Improves the way exceptions are printed, including print*, pr*,
-   and clojure.pprint/pprint.
+   clojure.pprint/pprint and clojure.repl/pst.
    
    Possible options:
    
@@ -401,11 +426,13 @@
    (install! {}))
   ([opts]
    (alter-var-root #'config (constantly (merge (default-config) opts)))
+   (alter-var-root #'repl/pst (constantly patched-pst))
    (.addMethod ^MultiFn print-method Throwable patched-print-method)))
 
 (defn uninstall!
-  "Restore default Clojure printer for Throwable"
+  "Restore default Clojure printer for Throwable and clojure.repl/pst"
   []
+  (alter-var-root #'repl/pst (constantly clojure-pst))
   (.addMethod ^MultiFn print-method Throwable clojure-print-method))
 
 (comment
