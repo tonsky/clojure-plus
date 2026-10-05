@@ -622,10 +622,6 @@
      (read-string \"#atom 123\")
      (read-string \"#transient [1 2 3]\")
    
-   Readers are installed to default-data-readers, not *data-readers*. That
-   makes them visible in all threads and binding frames, and to clojure.edn
-   readers, too. Tags from *data-readers* take precedence.
-   
    Possible opts:
    
      :include :: [sym ...] - list of tags to include (white list)
@@ -633,7 +629,8 @@
   ([]
    (install-readers! {}))
   ([opts]
-   (alter-var-root #'default-data-readers merge (data-readers opts))))
+   (let [readers (data-readers opts)]
+     (util/rebind-dynamic *data-readers* merge readers))))
 
 (defn install!
   "Install both printers and readers for most of Clojure built-in data structures.

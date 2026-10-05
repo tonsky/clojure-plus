@@ -56,24 +56,28 @@
        ;; => {}
 
    Modifying root binding is not enough, as the changes don't automatically
-   propagate down the stack. Here we are abusing pop/pushBindings to add
-   desired readers to every frame in dynamic vars stack."
-  [var f args]
-  (let [bindings (clojure.lang.Var/getThreadBindings)]
+   propagate down the stack. Here we are popping frames of dynamic vars stack
+   one by one, setting desired readers at every level, and then putting
+   the original stack back."
+  [^clojure.lang.Var var f args]
+  (let [frame (clojure.lang.Var/getThreadBindingFrame)]
     (try
-      (clojure.lang.Var/popThreadBindings)
-      (try
-        (rebind-dynamic-impl var f args)
-        (finally
-          (clojure.lang.Var/pushThreadBindings
-            (apply update bindings var f args))))
+      (loop [seen nil]
+        (let [box (.getThreadBinding var)]
+          ;; frames share the box until var is bound again, set it only once
+          (when (and box (not (identical? box seen)))
+            (var-set var (apply f @var args)))
+          (clojure.lang.Var/popThreadBindings)
+          (recur box)))
       (catch IllegalStateException _
-        nil))))
+        nil)
+      (finally
+        (clojure.lang.Var/resetThreadBindingFrame frame)))))
 
 (defmacro rebind-dynamic [var f & args]
   `(do
      (alter-var-root (var ~var) ~f ~@args)
-     ~(if true #_bb?
+     ~(if bb?
         `(when (thread-bound? (var ~var))
            (set! ~var (~f ~var ~@args)))
         `(rebind-dynamic-impl (var ~var) ~f ~(vec args)))))
