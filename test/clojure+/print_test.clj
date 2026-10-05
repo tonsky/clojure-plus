@@ -260,7 +260,9 @@
         _  (is (= 3 ((f4) 1 2)))]))
 
 (deftest multifn-test
-  (is (= "#multifn print-method" (pr-str print-method))))
+  (is (= "#multifn print-method" (pr-str print-method)))
+  (is (nil? (get-method print-dup clojure.lang.MultiFn)))
+  (is (not (contains? (print/data-readers) 'multifn))))
 
 (deftest ns-test
   (let [ns  (find-ns 'clojure+.print-test)
@@ -608,6 +610,40 @@
         _  (is (= 1 @(.get ^AtomicReferenceArray a' 0)))
         _  (is (= 2 @(.get ^AtomicReferenceArray a' 1)))
         _  (is (= 3 @(.get ^AtomicReferenceArray a' 2)))]))
+
+(deftest print-dup-test
+  (with-redefs [default-data-readers {}]
+    (binding [*data-readers* {}]
+      (are [x s] (let [s' (binding [*print-dup* true] (pr-str x))
+                       f  (eval `(fn [] ~x))]
+                   (and
+                     (= s s')
+                     (= x (read-string s'))
+                     (= x (f))))
+        (io/file "/abc/x\"y")                 "#=(java.io.File. \"/abc/x\\\"y\")"
+        (InetAddress/getByName "127.0.0.1")   "#=(java.net.InetAddress/getByName \"127.0.0.1\")"
+        (URI. "https://example.com/a?b=c")    "#=(java.net.URI. \"https://example.com/a?b=c\")"
+        (URL. "https://example.com/a?b=c")    "#=(java.net.URL. \"https://example.com/a?b=c\")"
+        (Charset/forName "UTF-8")             "#=(java.nio.charset.Charset/forName \"UTF-8\")"
+        (.toPath (io/file "abc/x"))           "#=(java.nio.file.Paths/get \"abc/x\" #=(clojure.core/make-array #=java.lang.String 0))"
+        (Duration/parse "PT12H30M59S")        "#=(java.time.Duration/parse \"PT12H30M59S\")"
+        (Instant/ofEpochMilli 1740020287703)  "#=(java.time.Instant/parse \"2025-02-20T02:58:07.703Z\")"
+        (LocalDate/parse "2025-02-20")        "#=(java.time.LocalDate/parse \"2025-02-20\")"
+        (LocalDateTime/parse "2025-02-20T02:58:07") "#=(java.time.LocalDateTime/parse \"2025-02-20T02:58:07\")"
+        (LocalTime/parse "02:58:07")          "#=(java.time.LocalTime/parse \"02:58:07\")"
+        (MonthDay/of 2 20)                    "#=(java.time.MonthDay/parse \"--02-20\")"
+        (OffsetDateTime/parse "2025-02-20T02:58:07+03:45") "#=(java.time.OffsetDateTime/parse \"2025-02-20T02:58:07+03:45\")"
+        (OffsetTime/parse "02:58:07+03:45")   "#=(java.time.OffsetTime/parse \"02:58:07+03:45\")"
+        (Period/parse "P1Y2M3D")              "#=(java.time.Period/parse \"P1Y2M3D\")"
+        (Year/of 2025)                        "#=(java.time.Year/parse \"2025\")"
+        (YearMonth/of 2025 2)                 "#=(java.time.YearMonth/parse \"2025-02\")"
+        (ZonedDateTime/parse "2025-02-20T02:58:07+01:00[Europe/Berlin]") "#=(java.time.ZonedDateTime/parse \"2025-02-20T02:58:07+01:00[Europe/Berlin]\")"
+        (ZoneId/of "Europe/Berlin")           "#=(java.time.ZoneId/of \"Europe/Berlin\")"
+        (ZoneOffset/of "+03:45")              "#=(java.time.ZoneOffset/of \"+03:45\")"
+        DayOfWeek/WEDNESDAY                   "#=(java.time.DayOfWeek/valueOf \"WEDNESDAY\")"
+        Month/FEBRUARY                        "#=(java.time.Month/valueOf \"FEBRUARY\")"
+        ChronoUnit/HALF_DAYS                  "#=(java.time.temporal.ChronoUnit/valueOf \"HALF_DAYS\")"
+        TimeUnit/SECONDS                      "#=(java.util.concurrent.TimeUnit/valueOf \"SECONDS\")"))))
 
 (deftest default-data-readers-test
   (binding [*data-readers* {}]

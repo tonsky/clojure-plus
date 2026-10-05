@@ -8,6 +8,7 @@
 
 - Keep system `print-dup` for namespaces and functions #30
 - Install readers to `default-data-readers`, too, so they are visible in all threads and binding frames #30
+- Reader-independent `print-dup` for `java.time`, enums, `File`, `Path`, `URI`, `URL`, `InetAddress`, `Charset` #30
 
 # 1.7.2 - Java 26, 2026
 

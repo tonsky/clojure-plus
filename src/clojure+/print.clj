@@ -27,9 +27,14 @@
     (print-method x w))
   nil)
 
-(defmacro defliteral [cls getter quoted-tag ctor]
+(defmacro defliteral
+  "dup-fmt, if provided, is a reader-independent representation used for print-dup,
+   e.g. \"#=(java.io.File. %s)\". Compiler uses print-dup to embed constants into
+   bytecode, and this form can be read back even if our readers are not installed"
+  [cls getter quoted-tag ctor & [dup-fmt]]
   (let [tag       (second quoted-tag)
         print-sym (symbol (str "print-" tag))
+        dup-sym   (symbol (str "print-dup-" tag))
         read-sym  (symbol (str "read-" tag))
         val-sym   (with-meta (gensym "v") {:tag cls})]
     `(do
@@ -43,19 +48,29 @@
                (.write w# "\""))
              (pr-on w# rep#))))
 
+       ~(when dup-fmt
+          `(defn ~dup-sym [~val-sym ^Writer w#]
+             (.write w# (format ~dup-fmt (pr-str (~getter ~val-sym))))))
+
        (defn ~read-sym [s#]
          (~ctor s#))
      
-       (swap! *catalogue conj {:class ~cls :tag ~quoted-tag :print (var ~print-sym) :read (var ~read-sym)}))))
+       (swap! *catalogue conj {:class ~cls :tag ~quoted-tag :print (var ~print-sym) :dup ~(when dup-fmt `(var ~dup-sym)) :read (var ~read-sym)}))))
 
 (defmacro defenum [cls quoted-tag values]
   (let [tag       (second quoted-tag)
         print-sym (symbol (str "print-" tag))
+        dup-sym   (symbol (str "print-dup-" tag))
         read-sym  (symbol (str "read-" tag))]
     `(do
        (defn ~print-sym [v# ^Writer w#]
          (.write w# ~(str "#" tag " :"))
          (.write w# (str/lower-case (str v#))))
+
+       (defn ~dup-sym [^Enum v# ^Writer w#]
+         (.write w# ~(str "#=(" (.getName ^Class (resolve cls)) "/valueOf \""))
+         (.write w# (.name v#))
+         (.write w# "\")"))
 
        (defn ~read-sym [kw#]
          (case kw#
@@ -64,7 +79,7 @@
                         (symbol (str cls) (str sym))]]
                kv)))
      
-       (swap! *catalogue conj {:class ~cls :tag ~quoted-tag :print (var ~print-sym) :read (var ~read-sym)}))))
+       (swap! *catalogue conj {:class ~cls :tag ~quoted-tag :print (var ~print-sym) :dup (var ~dup-sym) :read (var ~read-sym)}))))
 
 (defmacro prefer [a b]
   `(do
@@ -349,7 +364,7 @@
 
 ;; java.io
 
-(defliteral File .getPath 'file #(File. ^String %))
+(defliteral File .getPath 'file #(File. ^String %) "#=(java.io.File. %s)")
 
 
 ;; java.lang
@@ -379,38 +394,38 @@
 
 ;; java.net
 
-(defliteral InetAddress .getHostAddress 'inet-address InetAddress/getByName)
-(defliteral URI         str             'uri          URI.)
-(defliteral URL         str             'url          URL.)
+(defliteral InetAddress .getHostAddress 'inet-address InetAddress/getByName "#=(java.net.InetAddress/getByName %s)")
+(defliteral URI         str             'uri          URI.                  "#=(java.net.URI. %s)")
+(defliteral URL         str             'url          URL.                  "#=(java.net.URL. %s)")
 
 
 
 ;; java.nio.charset
 
-(defliteral Charset .name 'charset Charset/forName)
+(defliteral Charset .name 'charset Charset/forName "#=(java.nio.charset.Charset/forName %s)")
 
 
 ;; java.nio.file
 
-(defliteral Path str 'path #(.toPath (io/file %)))
+(defliteral Path str 'path #(.toPath (io/file %)) "#=(java.nio.file.Paths/get %s #=(clojure.core/make-array #=java.lang.String 0))")
 
 
 ;; java.time
 
-(defliteral Duration       str 'duration         Duration/parse)
-(defliteral Instant        str 'instant          Instant/parse)
-(defliteral LocalDate      str 'local-date       LocalDate/parse)
-(defliteral LocalDateTime  str 'local-date-time  LocalDateTime/parse)
-(defliteral LocalTime      str 'local-time       LocalTime/parse)
-(defliteral MonthDay       str 'month-day        MonthDay/parse)
-(defliteral OffsetDateTime str 'offset-date-time OffsetDateTime/parse)
-(defliteral OffsetTime     str 'offset-time      OffsetTime/parse)
-(defliteral Period         str 'period           Period/parse)
-(defliteral Year           str 'year             Year/parse)
-(defliteral YearMonth      str 'year-month       YearMonth/parse)
-(defliteral ZonedDateTime  str 'zoned-date-time  ZonedDateTime/parse)
-(defliteral ZoneId         str 'zone-id          ZoneId/of)
-(defliteral ZoneOffset     str 'zone-offset      #(ZoneOffset/of ^String %))
+(defliteral Duration       str 'duration         Duration/parse             "#=(java.time.Duration/parse %s)")
+(defliteral Instant        str 'instant          Instant/parse              "#=(java.time.Instant/parse %s)")
+(defliteral LocalDate      str 'local-date       LocalDate/parse            "#=(java.time.LocalDate/parse %s)")
+(defliteral LocalDateTime  str 'local-date-time  LocalDateTime/parse        "#=(java.time.LocalDateTime/parse %s)")
+(defliteral LocalTime      str 'local-time       LocalTime/parse            "#=(java.time.LocalTime/parse %s)")
+(defliteral MonthDay       str 'month-day        MonthDay/parse             "#=(java.time.MonthDay/parse %s)")
+(defliteral OffsetDateTime str 'offset-date-time OffsetDateTime/parse       "#=(java.time.OffsetDateTime/parse %s)")
+(defliteral OffsetTime     str 'offset-time      OffsetTime/parse           "#=(java.time.OffsetTime/parse %s)")
+(defliteral Period         str 'period           Period/parse               "#=(java.time.Period/parse %s)")
+(defliteral Year           str 'year             Year/parse                 "#=(java.time.Year/parse %s)")
+(defliteral YearMonth      str 'year-month       YearMonth/parse            "#=(java.time.YearMonth/parse %s)")
+(defliteral ZonedDateTime  str 'zoned-date-time  ZonedDateTime/parse        "#=(java.time.ZonedDateTime/parse %s)")
+(defliteral ZoneId         str 'zone-id          ZoneId/of                  "#=(java.time.ZoneId/of %s)")
+(defliteral ZoneOffset     str 'zone-offset      #(ZoneOffset/of ^String %) "#=(java.time.ZoneOffset/of %s)")
 
 (defenum DayOfWeek 'day-of-week
   [MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY])
@@ -506,10 +521,11 @@
    (install-printers! {}))
   ([opts]
    (let [catalogue (catalogue opts)]
-     (doseq [{:keys [class print]} catalogue]
+     (doseq [{:keys [class print dup read]} catalogue]
        (.addMethod ^MultiFn print-method class print)
-       (when-not (system-print-dup class)
-         (.addMethod ^MultiFn print-dup class print))
+       ;; print-dup has to be readable, so no reader -- no print-dup
+       (when (and read (not (system-print-dup class)))
+         (.addMethod ^MultiFn print-dup class (or dup print)))
        (.addMethod ^MultiFn pprint/simple-dispatch class #(print % *out*))))))
 
 (defn data-readers
@@ -522,7 +538,7 @@
   ([]
    (data-readers {}))
   ([opts]
-   (into {} (map (juxt :tag :read) (catalogue opts)))))
+   (into {} (keep (fn [{:keys [tag read]}] (when read [tag read])) (catalogue opts)))))
 
 (defn install-readers!
   "Install readers for most of Clojure built-in data structures.
