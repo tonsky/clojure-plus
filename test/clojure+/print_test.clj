@@ -609,6 +609,15 @@
         _  (is (= 2 @(.get ^AtomicReferenceArray a' 1)))
         _  (is (= 3 @(.get ^AtomicReferenceArray a' 2)))]))
 
+(deftest default-data-readers-test
+  (binding [*data-readers* {}]
+    (let [a (read-string "#atom 42")
+          _ (is (= 42 @a))
+
+          d (LocalDate/of 2026 1 26)
+          f (eval `(fn [] ~d))
+          _ (is (= d (f)))])))
+
 (deftest pprint-test
   (let [a [(atom 42) (io/file "/") (int-array [1 2 3])]
         _ (is (= "[#atom 42 #file \"/\" #ints [1 2 3]]\n"

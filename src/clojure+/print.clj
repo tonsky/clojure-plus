@@ -532,6 +532,10 @@
      (read-string \"#atom 123\")
      (read-string \"#transient [1 2 3]\")
    
+   Readers are installed to both *data-readers* and default-data-readers.
+   The latter makes them visible in all threads and binding frames, and to
+   clojure.edn readers, too.
+   
    Possible opts:
    
      :include :: [sym ...] - list of tags to include (white list)
@@ -540,6 +544,7 @@
    (install-readers! {}))
   ([opts]
    (let [readers (data-readers opts)]
+     (alter-var-root #'default-data-readers merge readers)
      (util/rebind-dynamic *data-readers* merge readers))))
 
 (defn install!
