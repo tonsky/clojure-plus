@@ -6,7 +6,7 @@
    [clojure+.util :as util])
   (:import
    [clojure.lang AFunction Agent Atom ATransientSet Compiler Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue  PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Var Volatile]
-   [java.io File Writer]
+   [java.io File StringWriter Writer]
    [java.lang.ref SoftReference WeakReference]
    [java.lang.reflect Field]
    [java.net InetAddress URI URL]
@@ -27,10 +27,19 @@
     (print-method x w))
   nil)
 
+(defn- print-dup-call
+  "Reader-independent representation used for print-dup: #=(f x). Compiler uses
+   print-dup to embed constants into bytecode, and this form can be read back
+   even if our readers are not installed"
+  [f x ^Writer w]
+  (.write w "#=(")
+  (.write w (str f))
+  (.write w " ")
+  (print-dup x w)
+  (.write w ")"))
+
 (defmacro defliteral
-  "dup-fmt, if provided, is a reader-independent representation used for print-dup,
-   e.g. \"#=(java.io.File. %s)\". Compiler uses print-dup to embed constants into
-   bytecode, and this form can be read back even if our readers are not installed"
+  "dup-fmt, if provided, is a template for print-dup, e.g. \"#=(java.io.File. %s)\""
   [cls getter quoted-tag ctor & [dup-fmt]]
   (let [tag       (second quoted-tag)
         print-sym (symbol (str "print-" tag))
@@ -49,8 +58,14 @@
              (pr-on w# rep#))))
 
        ~(when dup-fmt
-          `(defn ~dup-sym [~val-sym ^Writer w#]
-             (.write w# (format ~dup-fmt (pr-str (~getter ~val-sym))))))
+          (let [[before after] (str/split dup-fmt #"%s" 2)]
+            `(defn ~dup-sym [~val-sym ^Writer w#]
+               (.write w# ~before)
+               (let [rep# (~getter ~val-sym)]
+                 (if (string? rep#)
+                   (.write w# (pr-str rep#))
+                   (print-dup rep# w#)))
+               (.write w# ~after))))
 
        (defn ~read-sym [s#]
          (~ctor s#))
@@ -110,7 +125,11 @@
         (aset arr idx (byte b))))
     arr))
 
-(swap! *catalogue conj {:class (Class/forName "[B") :print #'print-bytes :tag 'bytes :read #'read-bytes})
+(defn make-print-dup-array [ctor f]
+  (fn [arr ^Writer w]
+    (print-dup-call ctor (f arr) w)))
+
+(swap! *catalogue conj {:class (Class/forName "[B") :print #'print-bytes :dup (make-print-dup-array 'clojure.core/byte-array #(mapv long %)) :tag 'bytes :read #'read-bytes})
 
 
 (defn make-print-array [tag]
@@ -120,18 +139,25 @@
     (.write w " ")
     (pr-on w (vec arr))))
 
-(swap! *catalogue conj {:class (Class/forName "[Z") :print (make-print-array 'booleans) :tag 'booleans :read #'boolean-array})
-(swap! *catalogue conj {:class (Class/forName "[C") :print (make-print-array 'chars)    :tag 'chars    :read #'char-array})
-(swap! *catalogue conj {:class (Class/forName "[S") :print (make-print-array 'shorts)   :tag 'shorts   :read #'short-array})
-(swap! *catalogue conj {:class (Class/forName "[I") :print (make-print-array 'ints)     :tag 'ints     :read #'int-array})
-(swap! *catalogue conj {:class (Class/forName "[J") :print (make-print-array 'longs)    :tag 'longs    :read #'long-array})
-(swap! *catalogue conj {:class (Class/forName "[F") :print (make-print-array 'floats)   :tag 'floats   :read #'float-array})
-(swap! *catalogue conj {:class (Class/forName "[D") :print (make-print-array 'doubles)  :tag 'doubles  :read #'double-array})
+(swap! *catalogue conj {:class (Class/forName "[Z") :print (make-print-array 'booleans) :dup (make-print-dup-array 'clojure.core/boolean-array vec)                 :tag 'booleans :read #'boolean-array})
+(swap! *catalogue conj {:class (Class/forName "[C") :print (make-print-array 'chars)    :dup (make-print-dup-array 'clojure.core/char-array #(String. ^chars %))    :tag 'chars    :read #'char-array})
+(swap! *catalogue conj {:class (Class/forName "[S") :print (make-print-array 'shorts)   :dup (make-print-dup-array 'clojure.core/short-array #(mapv long %))        :tag 'shorts   :read #'short-array})
+(swap! *catalogue conj {:class (Class/forName "[I") :print (make-print-array 'ints)     :dup (make-print-dup-array 'clojure.core/int-array #(mapv long %))          :tag 'ints     :read #'int-array})
+(swap! *catalogue conj {:class (Class/forName "[J") :print (make-print-array 'longs)    :dup (make-print-dup-array 'clojure.core/long-array vec)                    :tag 'longs    :read #'long-array})
+(swap! *catalogue conj {:class (Class/forName "[F") :print (make-print-array 'floats)   :dup (make-print-dup-array 'clojure.core/float-array #(mapv double %))      :tag 'floats   :read #'float-array})
+(swap! *catalogue conj {:class (Class/forName "[D") :print (make-print-array 'doubles)  :dup (make-print-dup-array 'clojure.core/double-array vec)                  :tag 'doubles  :read #'double-array})
 
 (defn read-strings [xs]
   (into-array String xs))
 
-(swap! *catalogue conj {:class (Class/forName "[Ljava.lang.String;") :print (make-print-array 'strings) :tag 'strings :read #'read-strings})
+(defn print-dup-objects [arr ^Writer w]
+  (.write w "#=(clojure.core/into-array #=(clojure.lang.RT/classForName ")
+  (.write w (pr-str (.getName (.getComponentType (class arr)))))
+  (.write w ") ")
+  (print-dup (vec arr) w)
+  (.write w ")"))
+
+(swap! *catalogue conj {:class (Class/forName "[Ljava.lang.String;") :print (make-print-array 'strings) :dup #'print-dup-objects :tag 'strings :read #'read-strings})
 
 
 (defn- print-array [arr w]
@@ -169,7 +195,7 @@
         (.write w " ")
         (print-array arr w)))))
 
-(swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'objects :read #'object-array})
+(swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :dup #'print-dup-objects :tag 'objects :read #'object-array})
 
 
 (util/if-clojure-version-gte "1.12.0"
@@ -188,7 +214,7 @@
       arr)))
 
 (util/if-clojure-version-gte "1.12.0"
-  (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :tag 'array :read #'read-array}))
+  (swap! *catalogue conj {:class (Class/forName "[Ljava.lang.Object;") :print #'print-objects :dup #'print-dup-objects :tag 'array :read #'read-array}))
 
 
 ;; refs
@@ -200,11 +226,15 @@
     (.write w " ")
     (pr-on w @ref)))
 
-(swap! *catalogue conj {:class Atom     :print (make-print-ref 'atom)     :tag 'atom     :read #'atom})
-(swap! *catalogue conj {:class Agent    :print (make-print-ref 'agent)    :tag 'agent    :read #'agent})
-(swap! *catalogue conj {:class Ref      :print (make-print-ref 'ref)      :tag 'ref      :read #'ref})
-(swap! *catalogue conj {:class Volatile :print (make-print-ref 'volatile) :tag 'volatile :read #'volatile!})
-(swap! *catalogue conj {:class Reduced  :print (make-print-ref 'reduced)  :tag 'reduced  :read #'reduced})
+(defn make-print-dup-ref [ctor]
+  (fn [ref ^Writer w]
+    (print-dup-call ctor @ref w)))
+
+(swap! *catalogue conj {:class Atom     :print (make-print-ref 'atom)     :dup (make-print-dup-ref 'clojure.core/atom)      :tag 'atom     :read #'atom})
+(swap! *catalogue conj {:class Agent    :print (make-print-ref 'agent)    :dup (make-print-dup-ref 'clojure.core/agent)     :tag 'agent    :read #'agent})
+(swap! *catalogue conj {:class Ref      :print (make-print-ref 'ref)      :dup (make-print-dup-ref 'clojure.core/ref)       :tag 'ref      :read #'ref})
+(swap! *catalogue conj {:class Volatile :print (make-print-ref 'volatile) :dup (make-print-dup-ref 'clojure.core/volatile!) :tag 'volatile :read #'volatile!})
+(swap! *catalogue conj {:class Reduced  :print (make-print-ref 'reduced)  :dup (make-print-dup-ref 'clojure.core/reduced)   :tag 'reduced  :read #'reduced})
 
 
 (defn print-promise [^IPending ref ^Writer w]
@@ -212,6 +242,14 @@
   (if (realized? ref)
     (pr-on w @ref)
     (.write w "<pending...>")))
+
+(defn print-dup-promise [^IPending ref ^Writer w]
+  (if (realized? ref)
+    (do
+      (.write w "#=(clojure.core/deliver #=(clojure.core/promise) ")
+      (print-dup @ref w)
+      (.write w ")"))
+    (.write w "#=(clojure.core/promise)")))
 
 (defn- read-promise [val]
   (if (= '<pending...> val)
@@ -221,7 +259,7 @@
 (prefer IPending IDeref)
 (prefer ISeq IPending)
 (prefer List IPending)
-(swap! *catalogue conj {:class IPending :print print-promise :tag 'promise :read #'read-promise})
+(swap! *catalogue conj {:class IPending :print print-promise :dup #'print-dup-promise :tag 'promise :read #'read-promise})
 
 
 (defn print-delay [^Delay ref ^Writer w]
@@ -230,13 +268,20 @@
     (pr-on w @ref)
     (.write w "<pending...>")))
 
+(defn print-dup-delay [^Delay ref ^Writer w]
+  (when-not (realized? ref)
+    (throw (ex-info "Can’t print-dup <pending...> delay" {})))
+  (.write w "#=(clojure.lang.Delay. ")
+  (print-dup-call 'clojure.core/constantly @ref w)
+  (.write w ")"))
+
 (defn- read-delay [val]
   (if (= '<pending...> val)
     (throw (ex-info "Can’t read back <pending...> delay" {}))
     (doto (delay val)
       (deref))))
 
-(swap! *catalogue conj {:class Delay :print print-delay :tag 'delay :read #'read-delay})
+(swap! *catalogue conj {:class Delay :print print-delay :dup #'print-dup-delay :tag 'delay :read #'read-delay})
 
 
 (defn print-future [^Future ref ^Writer w]
@@ -244,6 +289,13 @@
   (if (.isDone ref)
     (pr-on w (.get ref))
     (.write w "<pending...>")))
+
+(defn print-dup-future [^Future ref ^Writer w]
+  (when-not (.isDone ref)
+    (throw (ex-info "Can’t print-dup <pending...> future" {})))
+  (.write w "#=(clojure.core/future-call ")
+  (print-dup-call 'clojure.core/constantly (.get ref) w)
+  (.write w ")"))
 
 (defn- read-future [val]
   (if (= '<pending...> val)
@@ -253,7 +305,7 @@
 
 (prefer Future IPending)
 (prefer Future IDeref)
-(swap! *catalogue conj {:class Future :print print-future :tag 'future :read #'read-future})
+(swap! *catalogue conj {:class Future :print print-future :dup #'print-dup-future :tag 'future :read #'read-future})
 
 
 ;; #function
@@ -290,6 +342,17 @@
 
 ;; #transient
 
+(defn make-print-dup-transient
+  "Same as print, but #=(clojure.core/transient ...) instead of #transient ..."
+  [print]
+  (fn [t ^Writer w]
+    (let [sw (StringWriter.)]
+      (binding [*print-dup* true]
+        (print t sw))
+      (.write w "#=(clojure.core/transient ")
+      (.write w (subs (str sw) (count "#transient ")))
+      (.write w ")"))))
+
 (defn print-transient-vector [^PersistentVector$TransientVector v ^Writer w]
   (let [cnt (count v)]
     (.write w "#transient [")
@@ -299,7 +362,7 @@
         (.write w " ")))
     (.write w "]")))
 
-(swap! *catalogue conj {:class PersistentVector$TransientVector :print #'print-transient-vector :tag 'transient :read #'transient})
+(swap! *catalogue conj {:class PersistentVector$TransientVector :print #'print-transient-vector :dup (make-print-dup-transient print-transient-vector) :tag 'transient :read #'transient})
 
 
 (def ^:private ^Field array-map-array-field
@@ -318,7 +381,7 @@
         (.write w ", ")))
     (.write w "}")))
 
-(swap! *catalogue conj {:class PersistentArrayMap$TransientArrayMap :print #'print-transient-array-map :tag 'transient :read #'transient})
+(swap! *catalogue conj {:class PersistentArrayMap$TransientArrayMap :print #'print-transient-array-map :dup (make-print-dup-transient print-transient-array-map) :tag 'transient :read #'transient})
 
 
 (def ^:private ^Field hash-map-edit-field
@@ -333,7 +396,7 @@
     (pr-on w m')
     (.set edit edit-value)))
 
-(swap! *catalogue conj {:class PersistentHashMap$TransientHashMap :print #'print-transient-hash-map :tag 'transient :read #'transient})
+(swap! *catalogue conj {:class PersistentHashMap$TransientHashMap :print #'print-transient-hash-map :dup (make-print-dup-transient print-transient-hash-map) :tag 'transient :read #'transient})
 
 
 (def ^:private ^Field set-impl-field
@@ -354,12 +417,12 @@
     (.write w "}")
     (.set edit edit-value)))
 
-(swap! *catalogue conj {:class ATransientSet :print #'print-transient-set :tag 'transient :read #'transient})
+(swap! *catalogue conj {:class ATransientSet :print #'print-transient-set :dup (make-print-dup-transient print-transient-set) :tag 'transient :read #'transient})
 
 
 ;; #queue
 
-(defliteral PersistentQueue vec 'queue #(into PersistentQueue/EMPTY %))
+(defliteral PersistentQueue vec 'queue #(into PersistentQueue/EMPTY %) "#=(clojure.core/into #=(clojure.lang.Reflector/getStaticField \"clojure.lang.PersistentQueue\" \"EMPTY\") %s)")
 
 
 ;; java.io
@@ -388,8 +451,8 @@
 
 ;; java.lang.ref
 
-(defliteral SoftReference .get 'soft-ref SoftReference.)
-(defliteral WeakReference .get 'weak-ref WeakReference.)
+(defliteral SoftReference .get 'soft-ref SoftReference. "#=(java.lang.ref.SoftReference. %s)")
+(defliteral WeakReference .get 'weak-ref WeakReference. "#=(java.lang.ref.WeakReference. %s)")
 
 
 ;; java.net
@@ -445,10 +508,10 @@
 
 ;; java.util.concurrent.atomic
 
-(defliteral AtomicBoolean   .get 'atomic-boolean AtomicBoolean.)
-(defliteral AtomicInteger   .get 'atomic-int     AtomicInteger.)
-(defliteral AtomicLong      .get 'atomic-long    AtomicLong.)
-(defliteral AtomicReference .get 'atomic-ref     AtomicReference.)
+(defliteral AtomicBoolean   .get 'atomic-boolean AtomicBoolean.   "#=(java.util.concurrent.atomic.AtomicBoolean. %s)")
+(defliteral AtomicInteger   .get 'atomic-int     AtomicInteger.   "#=(java.util.concurrent.atomic.AtomicInteger. %s)")
+(defliteral AtomicLong      .get 'atomic-long    AtomicLong.      "#=(java.util.concurrent.atomic.AtomicLong. %s)")
+(defliteral AtomicReference .get 'atomic-ref     AtomicReference. "#=(java.util.concurrent.atomic.AtomicReference. %s)")
 
 (defn print-atomic-ints [^AtomicIntegerArray a ^Writer w]
   (.write w "#atomic-ints [")
@@ -458,10 +521,15 @@
       (.write w " ")))
   (.write w "]"))
 
+(defn print-dup-atomic-ints [^AtomicIntegerArray a ^Writer w]
+  (.write w "#=(java.util.concurrent.atomic.AtomicIntegerArray. ")
+  (print-dup-call 'clojure.core/int-array (mapv #(long (.get a (int %))) (range (.length a))) w)
+  (.write w ")"))
+
 (defn read-atomic-ints [xs]
   (AtomicIntegerArray. (int-array xs)))
 
-(swap! *catalogue conj {:class AtomicIntegerArray :print #'print-atomic-ints :tag 'atomic-ints :read #'read-atomic-ints})
+(swap! *catalogue conj {:class AtomicIntegerArray :print #'print-atomic-ints :dup #'print-dup-atomic-ints :tag 'atomic-ints :read #'read-atomic-ints})
 
 
 (defn print-atomic-longs [^AtomicLongArray a ^Writer w]
@@ -472,10 +540,15 @@
       (.write w " ")))
   (.write w "]"))
 
+(defn print-dup-atomic-longs [^AtomicLongArray a ^Writer w]
+  (.write w "#=(java.util.concurrent.atomic.AtomicLongArray. ")
+  (print-dup-call 'clojure.core/long-array (mapv #(.get a (int %)) (range (.length a))) w)
+  (.write w ")"))
+
 (defn read-atomic-longs [xs]
   (AtomicLongArray. (long-array xs)))
 
-(swap! *catalogue conj {:class AtomicLongArray :print #'print-atomic-longs :tag 'atomic-longs :read #'read-atomic-longs})
+(swap! *catalogue conj {:class AtomicLongArray :print #'print-atomic-longs :dup #'print-dup-atomic-longs :tag 'atomic-longs :read #'read-atomic-longs})
 
 
 (defn print-atomic-refs [^AtomicReferenceArray a ^Writer w]
@@ -486,10 +559,15 @@
       (.write w " ")))
   (.write w "]"))
 
+(defn print-dup-atomic-refs [^AtomicReferenceArray a ^Writer w]
+  (.write w "#=(java.util.concurrent.atomic.AtomicReferenceArray. ")
+  (print-dup-call 'clojure.core/object-array (mapv #(.get a (int %)) (range (.length a))) w)
+  (.write w ")"))
+
 (defn read-atomic-refs [xs]
   (AtomicReferenceArray. ^objects (into-array Object xs)))
 
-(swap! *catalogue conj {:class AtomicReferenceArray :print #'print-atomic-refs :tag 'atomic-refs :read #'read-atomic-refs})
+(swap! *catalogue conj {:class AtomicReferenceArray :print #'print-atomic-refs :dup #'print-dup-atomic-refs :tag 'atomic-refs :read #'read-atomic-refs})
 
 
 ;; install
@@ -498,12 +576,6 @@
   (cond->> @*catalogue
     exclude (remove #((set exclude) (:tag %)))
     include (filter #((set include) (:tag %)))))
-
-(def ^:private system-print-dup
-  "Classes that already have print-dup in clojure.core. Compiler uses print-dup
-   to embed constants into bytecode, and built-in representation can always be
-   read back, even if our readers are not installed."
-  #{Namespace AFunction})
 
 (defn install-printers!
   "Install printers for most of Clojure built-in data structures.
@@ -521,11 +593,13 @@
    (install-printers! {}))
   ([opts]
    (let [catalogue (catalogue opts)]
-     (doseq [{:keys [class print dup read]} catalogue]
+     (doseq [{:keys [class print dup]} catalogue]
        (.addMethod ^MultiFn print-method class print)
-       ;; print-dup has to be readable, so no reader -- no print-dup
-       (when (and read (not (system-print-dup class)))
-         (.addMethod ^MultiFn print-dup class (or dup print)))
+       ;; Compiler uses print-dup to embed constants into bytecode, so it has
+       ;; to be readable without our readers. No :dup means either system
+       ;; print-dup is fine (ns, fn) or value can't be read back (multifn, thread)
+       (when dup
+         (.addMethod ^MultiFn print-dup class dup))
        (.addMethod ^MultiFn pprint/simple-dispatch class #(print % *out*))))))
 
 (defn data-readers
