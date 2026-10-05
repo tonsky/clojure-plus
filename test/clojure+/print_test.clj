@@ -320,6 +320,26 @@
         _  (is (instance? ATransientSet s'))
         _  (is (= (persistent! s) (persistent! s')))]))
 
+(deftest transient-print-failure-test
+  (let [pending (delay 42)
+        failed  (delay (throw (ex-info "Printing failed" {})))]
+    (try @failed (catch ExceptionInfo _))
+    (doseq [[dup? value] [[true pending] [false failed] [true failed]]]
+      (testing (str "hash map remains editable after printing fails, *print-dup*=" dup?)
+        (let [m (transient (assoc (into {} (map #(vector % %) (range 10))) :value value))]
+          (is (thrown? ExceptionInfo
+                (binding [*print-dup* dup?]
+                  (pr-str m))))
+          (is (= 11 (count m)))
+          (is (= :ok (:added (persistent! (assoc! m :added :ok)))))))
+      (testing (str "set remains editable after printing fails, *print-dup*=" dup?)
+        (let [s (transient #{value})]
+          (is (thrown? ExceptionInfo
+                (binding [*print-dup* dup?]
+                  (pr-str s))))
+          (is (= 1 (count s)))
+          (is (= #{value :added} (persistent! (conj! s :added)))))))))
+
 (deftest queue-test
   (let [q  (into PersistentQueue/EMPTY [1 2 3])
         _  (is (= "#queue [1 2 3]" (pr-str q)))

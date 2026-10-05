@@ -9,6 +9,7 @@
 - Keep system `print-dup` for namespaces and functions #30
 - Reader-independent `print-dup` #30
 - Actually install readers to all frames in dynamic var bindings #16 #30
+- Keep transient maps and sets editable if printing throws
 
 # 1.7.2 - Java 26, 2026
 

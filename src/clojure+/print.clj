@@ -6,7 +6,7 @@
    [clojure+.util :as util])
   (:import
    [clojure.lang AFunction Agent Atom ATransientSet Compiler Delay IDeref IPending ISeq MultiFn Namespace PersistentQueue  PersistentArrayMap$TransientArrayMap PersistentHashMap PersistentHashMap$TransientHashMap PersistentVector$TransientVector Reduced Ref Var Volatile]
-   [java.io File StringWriter Writer]
+   [java.io File Writer]
    [java.lang.ref SoftReference WeakReference]
    [java.lang.reflect Field]
    [java.net InetAddress URI URL]
@@ -38,9 +38,14 @@
   (print-dup x w)
   (.write w ")"))
 
+(defn make-print-dup [ctor getter]
+  (fn [v ^Writer w]
+    (print-dup-call ctor (getter v) w)))
+
 (defmacro defliteral
-  "dup-fmt, if provided, is a template for print-dup, e.g. \"#=(java.io.File. %s)\""
-  [cls getter quoted-tag ctor & [dup-fmt]]
+  "dup, if provided, is a fully qualified constructor/function symbol, or a
+   printer function of [representation writer] for more complex forms."
+  [cls getter quoted-tag ctor & [dup]]
   (let [tag       (second quoted-tag)
         print-sym (symbol (str "print-" tag))
         dup-sym   (symbol (str "print-dup-" tag))
@@ -57,20 +62,17 @@
                (.write w# "\""))
              (pr-on w# rep#))))
 
-       ~(when dup-fmt
-          (let [[before after] (str/split dup-fmt #"%s" 2)]
-            `(defn ~dup-sym [~val-sym ^Writer w#]
-               (.write w# ~before)
-               (let [rep# (~getter ~val-sym)]
-                 (if (string? rep#)
-                   (.write w# (pr-str rep#))
-                   (print-dup rep# w#)))
-               (.write w# ~after))))
+       ~(when dup
+          (let [w (with-meta (gensym "w") {:tag `Writer})]
+            `(defn ~dup-sym [~val-sym ~w]
+               ~(if (symbol? dup)
+                  `(print-dup-call '~dup (~getter ~val-sym) ~w)
+                  `(~dup (~getter ~val-sym) ~w)))))
 
        (defn ~read-sym [s#]
          (~ctor s#))
      
-       (swap! *catalogue conj {:class ~cls :tag ~quoted-tag :print (var ~print-sym) :dup ~(when dup-fmt `(var ~dup-sym)) :read (var ~read-sym)}))))
+       (swap! *catalogue conj {:class ~cls :tag ~quoted-tag :print (var ~print-sym) :dup ~(when dup `(var ~dup-sym)) :read (var ~read-sym)}))))
 
 (defmacro defenum [cls quoted-tag values]
   (let [tag       (second quoted-tag)
@@ -83,9 +85,7 @@
          (.write w# (str/lower-case (str v#))))
 
        (defn ~dup-sym [^Enum v# ^Writer w#]
-         (.write w# ~(str "#=(" (.getName ^Class (resolve cls)) "/valueOf \""))
-         (.write w# (.name v#))
-         (.write w# "\")"))
+         (print-dup-call '~(symbol (.getName ^Class (resolve cls)) "valueOf") (.name v#) w#))
 
        (defn ~read-sym [kw#]
          (case kw#
@@ -125,11 +125,7 @@
         (aset arr idx (byte b))))
     arr))
 
-(defn make-print-dup-array [ctor f]
-  (fn [arr ^Writer w]
-    (print-dup-call ctor (f arr) w)))
-
-(swap! *catalogue conj {:class (Class/forName "[B") :print #'print-bytes :dup (make-print-dup-array 'clojure.core/byte-array #(mapv long %)) :tag 'bytes :read #'read-bytes})
+(swap! *catalogue conj {:class (Class/forName "[B") :print #'print-bytes :dup (make-print-dup 'clojure.core/byte-array #(mapv long %)) :tag 'bytes :read #'read-bytes})
 
 
 (defn make-print-array [tag]
@@ -139,13 +135,13 @@
     (.write w " ")
     (pr-on w (vec arr))))
 
-(swap! *catalogue conj {:class (Class/forName "[Z") :print (make-print-array 'booleans) :dup (make-print-dup-array 'clojure.core/boolean-array vec)                 :tag 'booleans :read #'boolean-array})
-(swap! *catalogue conj {:class (Class/forName "[C") :print (make-print-array 'chars)    :dup (make-print-dup-array 'clojure.core/char-array #(String. ^chars %))    :tag 'chars    :read #'char-array})
-(swap! *catalogue conj {:class (Class/forName "[S") :print (make-print-array 'shorts)   :dup (make-print-dup-array 'clojure.core/short-array #(mapv long %))        :tag 'shorts   :read #'short-array})
-(swap! *catalogue conj {:class (Class/forName "[I") :print (make-print-array 'ints)     :dup (make-print-dup-array 'clojure.core/int-array #(mapv long %))          :tag 'ints     :read #'int-array})
-(swap! *catalogue conj {:class (Class/forName "[J") :print (make-print-array 'longs)    :dup (make-print-dup-array 'clojure.core/long-array vec)                    :tag 'longs    :read #'long-array})
-(swap! *catalogue conj {:class (Class/forName "[F") :print (make-print-array 'floats)   :dup (make-print-dup-array 'clojure.core/float-array #(mapv double %))      :tag 'floats   :read #'float-array})
-(swap! *catalogue conj {:class (Class/forName "[D") :print (make-print-array 'doubles)  :dup (make-print-dup-array 'clojure.core/double-array vec)                  :tag 'doubles  :read #'double-array})
+(swap! *catalogue conj {:class (Class/forName "[Z") :print (make-print-array 'booleans) :dup (make-print-dup 'clojure.core/boolean-array vec)              :tag 'booleans :read #'boolean-array})
+(swap! *catalogue conj {:class (Class/forName "[C") :print (make-print-array 'chars)    :dup (make-print-dup 'clojure.core/char-array #(String. ^chars %)) :tag 'chars    :read #'char-array})
+(swap! *catalogue conj {:class (Class/forName "[S") :print (make-print-array 'shorts)   :dup (make-print-dup 'clojure.core/short-array #(mapv long %))     :tag 'shorts   :read #'short-array})
+(swap! *catalogue conj {:class (Class/forName "[I") :print (make-print-array 'ints)     :dup (make-print-dup 'clojure.core/int-array #(mapv long %))       :tag 'ints     :read #'int-array})
+(swap! *catalogue conj {:class (Class/forName "[J") :print (make-print-array 'longs)    :dup (make-print-dup 'clojure.core/long-array vec)                 :tag 'longs    :read #'long-array})
+(swap! *catalogue conj {:class (Class/forName "[F") :print (make-print-array 'floats)   :dup (make-print-dup 'clojure.core/float-array #(mapv double %))   :tag 'floats   :read #'float-array})
+(swap! *catalogue conj {:class (Class/forName "[D") :print (make-print-array 'doubles)  :dup (make-print-dup 'clojure.core/double-array vec)               :tag 'doubles  :read #'double-array})
 
 (defn read-strings [xs]
   (into-array String xs))
@@ -226,15 +222,11 @@
     (.write w " ")
     (pr-on w @ref)))
 
-(defn make-print-dup-ref [ctor]
-  (fn [ref ^Writer w]
-    (print-dup-call ctor @ref w)))
-
-(swap! *catalogue conj {:class Atom     :print (make-print-ref 'atom)     :dup (make-print-dup-ref 'clojure.core/atom)      :tag 'atom     :read #'atom})
-(swap! *catalogue conj {:class Agent    :print (make-print-ref 'agent)    :dup (make-print-dup-ref 'clojure.core/agent)     :tag 'agent    :read #'agent})
-(swap! *catalogue conj {:class Ref      :print (make-print-ref 'ref)      :dup (make-print-dup-ref 'clojure.core/ref)       :tag 'ref      :read #'ref})
-(swap! *catalogue conj {:class Volatile :print (make-print-ref 'volatile) :dup (make-print-dup-ref 'clojure.core/volatile!) :tag 'volatile :read #'volatile!})
-(swap! *catalogue conj {:class Reduced  :print (make-print-ref 'reduced)  :dup (make-print-dup-ref 'clojure.core/reduced)   :tag 'reduced  :read #'reduced})
+(swap! *catalogue conj {:class Atom     :print (make-print-ref 'atom)     :dup (make-print-dup 'clojure.core/atom deref)      :tag 'atom     :read #'atom})
+(swap! *catalogue conj {:class Agent    :print (make-print-ref 'agent)    :dup (make-print-dup 'clojure.core/agent deref)     :tag 'agent    :read #'agent})
+(swap! *catalogue conj {:class Ref      :print (make-print-ref 'ref)      :dup (make-print-dup 'clojure.core/ref deref)       :tag 'ref      :read #'ref})
+(swap! *catalogue conj {:class Volatile :print (make-print-ref 'volatile) :dup (make-print-dup 'clojure.core/volatile! deref) :tag 'volatile :read #'volatile!})
+(swap! *catalogue conj {:class Reduced  :print (make-print-ref 'reduced)  :dup (make-print-dup 'clojure.core/reduced deref)   :tag 'reduced  :read #'reduced})
 
 
 (defn print-promise [^IPending ref ^Writer w]
@@ -342,37 +334,41 @@
 
 ;; #transient
 
-(defn make-print-dup-transient
-  "Same as print, but #=(clojure.core/transient ...) instead of #transient ..."
-  [print]
+(defn make-print-transient [print-body]
   (fn [t ^Writer w]
-    (let [sw (StringWriter.)]
-      (binding [*print-dup* true]
-        (print t sw))
-      (.write w "#=(clojure.core/transient ")
-      (.write w (subs (str sw) (count "#transient ")))
-      (.write w ")"))))
+    (.write w "#transient ")
+    (print-body t w)))
 
-(defn print-transient-vector [^PersistentVector$TransientVector v ^Writer w]
+(defn make-print-dup-transient [print-body]
+  (fn [t ^Writer w]
+    (.write w "#=(clojure.core/transient ")
+    (binding [*print-dup* true]
+      (print-body t w))
+    (.write w ")")))
+
+(defn- print-transient-vector-body [^PersistentVector$TransientVector v ^Writer w]
   (let [cnt (count v)]
-    (.write w "#transient [")
+    (.write w "[")
     (dotimes [i cnt]
       (pr-on w (nth v i))
       (when (< i (dec cnt))
         (.write w " ")))
     (.write w "]")))
 
-(swap! *catalogue conj {:class PersistentVector$TransientVector :print #'print-transient-vector :dup (make-print-dup-transient print-transient-vector) :tag 'transient :read #'transient})
+(def print-transient-vector
+  (make-print-transient print-transient-vector-body))
+
+(swap! *catalogue conj {:class PersistentVector$TransientVector :print #'print-transient-vector :dup (make-print-dup-transient print-transient-vector-body) :tag 'transient :read #'transient})
 
 
 (def ^:private ^Field array-map-array-field
   (doto (.getDeclaredField PersistentArrayMap$TransientArrayMap "array")
     (.setAccessible true)))
 
-(defn print-transient-array-map [^PersistentArrayMap$TransientArrayMap m ^Writer w]
+(defn- print-transient-array-map-body [^PersistentArrayMap$TransientArrayMap m ^Writer w]
   (let [cnt (count m)
         arr ^objects (.get array-map-array-field m)]
-    (.write w "#transient {")
+    (.write w "{")
     (dotimes [i cnt]
       (pr-on w (aget arr (-> i (* 2))))
       (.write w " ")
@@ -381,53 +377,69 @@
         (.write w ", ")))
     (.write w "}")))
 
-(swap! *catalogue conj {:class PersistentArrayMap$TransientArrayMap :print #'print-transient-array-map :dup (make-print-dup-transient print-transient-array-map) :tag 'transient :read #'transient})
+(def print-transient-array-map
+  (make-print-transient print-transient-array-map-body))
+
+(swap! *catalogue conj {:class PersistentArrayMap$TransientArrayMap :print #'print-transient-array-map :dup (make-print-dup-transient print-transient-array-map-body) :tag 'transient :read #'transient})
 
 
 (def ^:private ^Field hash-map-edit-field
   (doto (.getDeclaredField PersistentHashMap$TransientHashMap "edit")
     (.setAccessible true)))
 
-(defn print-transient-hash-map [^PersistentHashMap$TransientHashMap m ^Writer w]
+(defn- print-transient-hash-map-body [^PersistentHashMap$TransientHashMap m ^Writer w]
   (let [edit       ^AtomicReference (.get hash-map-edit-field m)
         edit-value (.get edit)
         m'         (persistent! m)]
-    (.write w "#transient ")
-    (pr-on w m')
-    (.set edit edit-value)))
+    (try
+      (pr-on w m')
+      (finally
+        (.set edit edit-value)))))
 
-(swap! *catalogue conj {:class PersistentHashMap$TransientHashMap :print #'print-transient-hash-map :dup (make-print-dup-transient print-transient-hash-map) :tag 'transient :read #'transient})
+(def print-transient-hash-map
+  (make-print-transient print-transient-hash-map-body))
+
+(swap! *catalogue conj {:class PersistentHashMap$TransientHashMap :print #'print-transient-hash-map :dup (make-print-dup-transient print-transient-hash-map-body) :tag 'transient :read #'transient})
 
 
 (def ^:private ^Field set-impl-field
   (doto (.getDeclaredField ATransientSet "impl")
     (.setAccessible true)))
 
-(defn print-transient-set [^ATransientSet s ^Writer w]
+(defn- print-transient-set-body [^ATransientSet s ^Writer w]
   (let [m          ^PersistentHashMap$TransientHashMap (.get set-impl-field s)
         edit       ^AtomicReference (.get hash-map-edit-field m)
         edit-value (.get edit)
         m'         (persistent! m)
         cnt        (count m')]
-    (.write w "#transient #{")
-    (doseq [[k idx] (map vector (keys m') (range))]
-      (pr-on w k)
-      (when (< idx (dec cnt))
-        (.write w " ")))
-    (.write w "}")
-    (.set edit edit-value)))
+    (try
+      (.write w "#{")
+      (doseq [[k idx] (map vector (keys m') (range))]
+        (pr-on w k)
+        (when (< idx (dec cnt))
+          (.write w " ")))
+      (.write w "}")
+      (finally
+        (.set edit edit-value)))))
 
-(swap! *catalogue conj {:class ATransientSet :print #'print-transient-set :dup (make-print-dup-transient print-transient-set) :tag 'transient :read #'transient})
+(def print-transient-set
+  (make-print-transient print-transient-set-body))
+
+(swap! *catalogue conj {:class ATransientSet :print #'print-transient-set :dup (make-print-dup-transient print-transient-set-body) :tag 'transient :read #'transient})
 
 
 ;; #queue
 
-(defliteral PersistentQueue vec 'queue #(into PersistentQueue/EMPTY %) "#=(clojure.core/into #=(clojure.lang.Reflector/getStaticField \"clojure.lang.PersistentQueue\" \"EMPTY\") %s)")
+(defliteral PersistentQueue vec 'queue #(into PersistentQueue/EMPTY %)
+  (fn [xs ^Writer w]
+    (.write w "#=(clojure.core/into #=(clojure.lang.Reflector/getStaticField \"clojure.lang.PersistentQueue\" \"EMPTY\") ")
+    (print-dup xs w)
+    (.write w ")")))
 
 
 ;; java.io
 
-(defliteral File .getPath 'file #(File. ^String %) "#=(java.io.File. %s)")
+(defliteral File .getPath 'file #(File. ^String %) java.io.File.)
 
 
 ;; java.lang
@@ -451,44 +463,48 @@
 
 ;; java.lang.ref
 
-(defliteral SoftReference .get 'soft-ref SoftReference. "#=(java.lang.ref.SoftReference. %s)")
-(defliteral WeakReference .get 'weak-ref WeakReference. "#=(java.lang.ref.WeakReference. %s)")
+(defliteral SoftReference .get 'soft-ref SoftReference. java.lang.ref.SoftReference.)
+(defliteral WeakReference .get 'weak-ref WeakReference. java.lang.ref.WeakReference.)
 
 
 ;; java.net
 
-(defliteral InetAddress .getHostAddress 'inet-address InetAddress/getByName "#=(java.net.InetAddress/getByName %s)")
-(defliteral URI         str             'uri          URI.                  "#=(java.net.URI. %s)")
-(defliteral URL         str             'url          URL.                  "#=(java.net.URL. %s)")
+(defliteral InetAddress .getHostAddress 'inet-address InetAddress/getByName java.net.InetAddress/getByName)
+(defliteral URI         str             'uri          URI.                  java.net.URI.)
+(defliteral URL         str             'url          URL.                  java.net.URL.)
 
 
 
 ;; java.nio.charset
 
-(defliteral Charset .name 'charset Charset/forName "#=(java.nio.charset.Charset/forName %s)")
+(defliteral Charset .name 'charset Charset/forName java.nio.charset.Charset/forName)
 
 
 ;; java.nio.file
 
-(defliteral Path str 'path #(.toPath (io/file %)) "#=(java.nio.file.Paths/get %s #=(clojure.core/make-array #=java.lang.String 0))")
+(defliteral Path str 'path #(.toPath (io/file %))
+  (fn [s ^Writer w]
+    (.write w "#=(java.nio.file.Paths/get ")
+    (print-dup s w)
+    (.write w " #=(clojure.core/make-array #=java.lang.String 0))")))
 
 
 ;; java.time
 
-(defliteral Duration       str 'duration         Duration/parse             "#=(java.time.Duration/parse %s)")
-(defliteral Instant        str 'instant          Instant/parse              "#=(java.time.Instant/parse %s)")
-(defliteral LocalDate      str 'local-date       LocalDate/parse            "#=(java.time.LocalDate/parse %s)")
-(defliteral LocalDateTime  str 'local-date-time  LocalDateTime/parse        "#=(java.time.LocalDateTime/parse %s)")
-(defliteral LocalTime      str 'local-time       LocalTime/parse            "#=(java.time.LocalTime/parse %s)")
-(defliteral MonthDay       str 'month-day        MonthDay/parse             "#=(java.time.MonthDay/parse %s)")
-(defliteral OffsetDateTime str 'offset-date-time OffsetDateTime/parse       "#=(java.time.OffsetDateTime/parse %s)")
-(defliteral OffsetTime     str 'offset-time      OffsetTime/parse           "#=(java.time.OffsetTime/parse %s)")
-(defliteral Period         str 'period           Period/parse               "#=(java.time.Period/parse %s)")
-(defliteral Year           str 'year             Year/parse                 "#=(java.time.Year/parse %s)")
-(defliteral YearMonth      str 'year-month       YearMonth/parse            "#=(java.time.YearMonth/parse %s)")
-(defliteral ZonedDateTime  str 'zoned-date-time  ZonedDateTime/parse        "#=(java.time.ZonedDateTime/parse %s)")
-(defliteral ZoneId         str 'zone-id          ZoneId/of                  "#=(java.time.ZoneId/of %s)")
-(defliteral ZoneOffset     str 'zone-offset      #(ZoneOffset/of ^String %) "#=(java.time.ZoneOffset/of %s)")
+(defliteral Duration       str 'duration         Duration/parse             java.time.Duration/parse)
+(defliteral Instant        str 'instant          Instant/parse              java.time.Instant/parse)
+(defliteral LocalDate      str 'local-date       LocalDate/parse            java.time.LocalDate/parse)
+(defliteral LocalDateTime  str 'local-date-time  LocalDateTime/parse        java.time.LocalDateTime/parse)
+(defliteral LocalTime      str 'local-time       LocalTime/parse            java.time.LocalTime/parse)
+(defliteral MonthDay       str 'month-day        MonthDay/parse             java.time.MonthDay/parse)
+(defliteral OffsetDateTime str 'offset-date-time OffsetDateTime/parse       java.time.OffsetDateTime/parse)
+(defliteral OffsetTime     str 'offset-time      OffsetTime/parse           java.time.OffsetTime/parse)
+(defliteral Period         str 'period           Period/parse               java.time.Period/parse)
+(defliteral Year           str 'year             Year/parse                 java.time.Year/parse)
+(defliteral YearMonth      str 'year-month       YearMonth/parse            java.time.YearMonth/parse)
+(defliteral ZonedDateTime  str 'zoned-date-time  ZonedDateTime/parse        java.time.ZonedDateTime/parse)
+(defliteral ZoneId         str 'zone-id          ZoneId/of                  java.time.ZoneId/of)
+(defliteral ZoneOffset     str 'zone-offset      #(ZoneOffset/of ^String %) java.time.ZoneOffset/of)
 
 (defenum DayOfWeek 'day-of-week
   [MONDAY TUESDAY WEDNESDAY THURSDAY FRIDAY SATURDAY SUNDAY])
@@ -508,10 +524,10 @@
 
 ;; java.util.concurrent.atomic
 
-(defliteral AtomicBoolean   .get 'atomic-boolean AtomicBoolean.   "#=(java.util.concurrent.atomic.AtomicBoolean. %s)")
-(defliteral AtomicInteger   .get 'atomic-int     AtomicInteger.   "#=(java.util.concurrent.atomic.AtomicInteger. %s)")
-(defliteral AtomicLong      .get 'atomic-long    AtomicLong.      "#=(java.util.concurrent.atomic.AtomicLong. %s)")
-(defliteral AtomicReference .get 'atomic-ref     AtomicReference. "#=(java.util.concurrent.atomic.AtomicReference. %s)")
+(defliteral AtomicBoolean   .get 'atomic-boolean AtomicBoolean.   java.util.concurrent.atomic.AtomicBoolean.)
+(defliteral AtomicInteger   .get 'atomic-int     AtomicInteger.   java.util.concurrent.atomic.AtomicInteger.)
+(defliteral AtomicLong      .get 'atomic-long    AtomicLong.      java.util.concurrent.atomic.AtomicLong.)
+(defliteral AtomicReference .get 'atomic-ref     AtomicReference. java.util.concurrent.atomic.AtomicReference.)
 
 (defn print-atomic-ints [^AtomicIntegerArray a ^Writer w]
   (.write w "#atomic-ints [")
