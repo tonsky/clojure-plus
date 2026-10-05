@@ -252,17 +252,29 @@
 
         _  (is (= "#fn clojure.core/+" (pr-str +)))
         f3 (read-string "#fn clojure.core/+")
-        _  (is (= 3 (f3 1 2)))]))
+        _  (is (= 3 (f3 1 2)))
+
+        _  (is (= "#=(clojure.core$_PLUS_. )" (binding [*print-dup* true] (pr-str +))))
+        f4 (binding [*data-readers* {}]
+             (eval `(fn [] ~+)))
+        _  (is (= 3 ((f4) 1 2)))]))
 
 (deftest multifn-test
-  (is (= "#multifn print-method" (pr-str print-method))))
+  (is (= "#multifn print-method" (pr-str print-method)))
+  (is (nil? (get-method print-dup clojure.lang.MultiFn)))
+  (is (not (contains? (print/data-readers) 'multifn))))
 
 (deftest ns-test
   (let [ns  (find-ns 'clojure+.print-test)
         _   (is (= "#ns clojure+.print-test" (pr-str ns)))
         ns' (read-string "#ns clojure+.print-test")
         _   (is (instance? Namespace ns'))
-        _   (is (= ns ns'))]))
+        _   (is (= ns ns'))
+
+        _   (is (= "#=(find-ns clojure+.print-test)" (binding [*print-dup* true] (pr-str ns))))
+        f   (binding [*data-readers* {}]
+              (eval `(fn [] ~ns)))
+        _   (is (= ns (f)))]))
 
 (deftest transient-vector-test
   (let [v  (transient [])
@@ -307,6 +319,26 @@
         s' (read-string "#transient #{1 2 3}")
         _  (is (instance? ATransientSet s'))
         _  (is (= (persistent! s) (persistent! s')))]))
+
+(deftest transient-print-failure-test
+  (let [pending (delay 42)
+        failed  (delay (throw (ex-info "Printing failed" {})))]
+    (try @failed (catch ExceptionInfo _))
+    (doseq [[dup? value] [[true pending] [false failed] [true failed]]]
+      (testing (str "hash map remains editable after printing fails, *print-dup*=" dup?)
+        (let [m (transient (assoc (into {} (map #(vector % %) (range 10))) :value value))]
+          (is (thrown? ExceptionInfo
+                (binding [*print-dup* dup?]
+                  (pr-str m))))
+          (is (= 11 (count m)))
+          (is (= :ok (:added (persistent! (assoc! m :added :ok)))))))
+      (testing (str "set remains editable after printing fails, *print-dup*=" dup?)
+        (let [s (transient #{value})]
+          (is (thrown? ExceptionInfo
+                (binding [*print-dup* dup?]
+                  (pr-str s))))
+          (is (= 1 (count s)))
+          (is (= #{value :added} (persistent! (conj! s :added)))))))))
 
 (deftest queue-test
   (let [q  (into PersistentQueue/EMPTY [1 2 3])
@@ -598,6 +630,110 @@
         _  (is (= 1 @(.get ^AtomicReferenceArray a' 0)))
         _  (is (= 2 @(.get ^AtomicReferenceArray a' 1)))
         _  (is (= 3 @(.get ^AtomicReferenceArray a' 2)))]))
+
+(deftest print-dup-test
+  (binding [*data-readers* {}]
+    (are [x s] (let [s' (binding [*print-dup* true] (pr-str x))
+                     f  (eval `(fn [] ~x))]
+                 (and
+                   (= s s')
+                   (= x (read-string s'))
+                   (= x (f))))
+      (io/file "/abc/x\"y")                 "#=(java.io.File. \"/abc/x\\\"y\")"
+      (InetAddress/getByName "127.0.0.1")   "#=(java.net.InetAddress/getByName \"127.0.0.1\")"
+      (URI. "https://example.com/a?b=c")    "#=(java.net.URI. \"https://example.com/a?b=c\")"
+      (URL. "https://example.com/a?b=c")    "#=(java.net.URL. \"https://example.com/a?b=c\")"
+      (Charset/forName "UTF-8")             "#=(java.nio.charset.Charset/forName \"UTF-8\")"
+      (.toPath (io/file "abc/x"))           "#=(java.nio.file.Paths/get \"abc/x\" #=(clojure.core/make-array #=java.lang.String 0))"
+      (Duration/parse "PT12H30M59S")        "#=(java.time.Duration/parse \"PT12H30M59S\")"
+      (Instant/ofEpochMilli 1740020287703)  "#=(java.time.Instant/parse \"2025-02-20T02:58:07.703Z\")"
+      (LocalDate/parse "2025-02-20")        "#=(java.time.LocalDate/parse \"2025-02-20\")"
+      (LocalDateTime/parse "2025-02-20T02:58:07") "#=(java.time.LocalDateTime/parse \"2025-02-20T02:58:07\")"
+      (LocalTime/parse "02:58:07")          "#=(java.time.LocalTime/parse \"02:58:07\")"
+      (MonthDay/of 2 20)                    "#=(java.time.MonthDay/parse \"--02-20\")"
+      (OffsetDateTime/parse "2025-02-20T02:58:07+03:45") "#=(java.time.OffsetDateTime/parse \"2025-02-20T02:58:07+03:45\")"
+      (OffsetTime/parse "02:58:07+03:45")   "#=(java.time.OffsetTime/parse \"02:58:07+03:45\")"
+      (Period/parse "P1Y2M3D")              "#=(java.time.Period/parse \"P1Y2M3D\")"
+      (Year/of 2025)                        "#=(java.time.Year/parse \"2025\")"
+      (YearMonth/of 2025 2)                 "#=(java.time.YearMonth/parse \"2025-02\")"
+      (ZonedDateTime/parse "2025-02-20T02:58:07+01:00[Europe/Berlin]") "#=(java.time.ZonedDateTime/parse \"2025-02-20T02:58:07+01:00[Europe/Berlin]\")"
+      (ZoneId/of "Europe/Berlin")           "#=(java.time.ZoneId/of \"Europe/Berlin\")"
+      (ZoneOffset/of "+03:45")              "#=(java.time.ZoneOffset/of \"+03:45\")"
+      DayOfWeek/WEDNESDAY                   "#=(java.time.DayOfWeek/valueOf \"WEDNESDAY\")"
+      Month/FEBRUARY                        "#=(java.time.Month/valueOf \"FEBRUARY\")"
+      ChronoUnit/HALF_DAYS                  "#=(java.time.temporal.ChronoUnit/valueOf \"HALF_DAYS\")"
+      TimeUnit/SECONDS                      "#=(java.util.concurrent.TimeUnit/valueOf \"SECONDS\")")))
+
+(defn- repr [x]
+  [(class x) (pr-str x)])
+
+(deftest print-dup-stateful-test
+  (binding [*data-readers* {}]
+    (are [x s] (let [s' (binding [*print-dup* true] (pr-str x))
+                     f  (eval `(fn [] ~x))]
+                 (and
+                   (= s s')
+                   (= (repr x) (repr (read-string s')))
+                   (= s (binding [*print-dup* true] (pr-str (read-string s'))))
+                   (= (repr x) (repr (f)))))
+      (byte-array [1 2 -1])                 "#=(clojure.core/byte-array [1 2 -1])"
+      (boolean-array [true false])          "#=(clojure.core/boolean-array [true false])"
+      (char-array "a\"b")                   "#=(clojure.core/char-array \"a\\\"b\")"
+      (short-array [1 2])                   "#=(clojure.core/short-array [1 2])"
+      (int-array [1 2])                     "#=(clojure.core/int-array [1 2])"
+      (long-array [1 2])                    "#=(clojure.core/long-array [1 2])"
+      (float-array [1.5 2.25])              "#=(clojure.core/float-array [1.5 2.25])"
+      (double-array [1.5 2.25])             "#=(clojure.core/double-array [1.5 2.25])"
+      (into-array String ["a" nil])         "#=(clojure.core/into-array #=(clojure.lang.RT/classForName \"java.lang.String\") [\"a\" nil])"
+      (object-array [1 "a" (atom :x)])      "#=(clojure.core/into-array #=(clojure.lang.RT/classForName \"java.lang.Object\") [1 \"a\" #=(clojure.core/atom :x)])"
+      (into-array [(int-array [1]) (int-array [2 3])]) "#=(clojure.core/into-array #=(clojure.lang.RT/classForName \"[I\") [#=(clojure.core/int-array [1]) #=(clojure.core/int-array [2 3])])"
+      (atom [1 2])                          "#=(clojure.core/atom [1 2])"
+      (agent 1)                             "#=(clojure.core/agent 1)"
+      (ref 1)                               "#=(clojure.core/ref 1)"
+      (volatile! 1)                         "#=(clojure.core/volatile! 1)"
+      (reduced 1)                           "#=(clojure.core/reduced 1)"
+      (deliver (promise) 1)                 "#=(clojure.core/deliver #=(clojure.core/promise) 1)"
+      (promise)                             "#=(clojure.core/promise)"
+      (doto (delay 1) deref)                "#=(clojure+.print/read-delay 1)"
+      (doto (future 1) deref)               "#=(clojure+.print/read-future 1)"
+      (transient [1 2])                     "#=(clojure.core/transient [1 2])"
+      (transient {1 2})                     "#=(clojure.core/transient {1 2})"
+      (transient #{1})                      "#=(clojure.core/transient #{1})"
+      (SoftReference. 1)                    "#=(java.lang.ref.SoftReference. 1)"
+      (WeakReference. 1)                    "#=(java.lang.ref.WeakReference. 1)"
+      (AtomicBoolean. true)                 "#=(java.util.concurrent.atomic.AtomicBoolean. true)"
+      (AtomicInteger. 7)                    "#=(java.util.concurrent.atomic.AtomicInteger. #=(java.lang.Integer. \"7\"))"
+      (AtomicLong. 7)                       "#=(java.util.concurrent.atomic.AtomicLong. 7)"
+      (AtomicReference. :x)                 "#=(java.util.concurrent.atomic.AtomicReference. :x)"
+      (AtomicIntegerArray. (int-array [1 2])) "#=(java.util.concurrent.atomic.AtomicIntegerArray. #=(clojure.core/int-array [1 2]))"
+      (AtomicLongArray. (long-array [1 2])) "#=(java.util.concurrent.atomic.AtomicLongArray. #=(clojure.core/long-array [1 2]))"
+      (AtomicReferenceArray. ^objects (into-array Object [1 nil])) "#=(java.util.concurrent.atomic.AtomicReferenceArray. #=(clojure.core/object-array [1 nil]))")
+
+    ;; compiler can’t embed queues, print-dup or not
+    (let [q  (into PersistentQueue/EMPTY [1 2])
+          s  (binding [*print-dup* true] (pr-str q))
+          _  (is (= "#=(clojure.core/into #=(clojure.lang.Reflector/getStaticField \"clojure.lang.PersistentQueue\" \"EMPTY\") [1 2])" s))
+          q' (read-string s)
+          _  (is (instance? PersistentQueue q'))
+          _  (is (= q q'))])
+
+    (is (thrown? Exception (binding [*print-dup* true] (pr-str (delay 1)))))))
+
+(def ^:dynamic *a* nil)
+
+(def ^:dynamic *b* nil)
+
+(deftest rebind-dynamic-test
+  (binding [*a* 1]
+    (binding [*a* 10]
+      ;; doesn't bind *a*, shares it with the frame below
+      (binding [*b* 1]
+        (util/rebind-dynamic-impl #'*a* + [100])
+        (is (= 110 *a*))
+        (set! *a* 111))
+      (is (= 111 *a*)))
+    (is (= 101 *a*)))
+  (is (= nil *a*)))
 
 (deftest pprint-test
   (let [a [(atom 42) (io/file "/") (int-array [1 2 3])]
