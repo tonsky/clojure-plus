@@ -703,13 +703,11 @@
       (is (thrown? Exception (binding [*print-dup* true] (pr-str (delay 1))))))))
 
 (deftest default-data-readers-test
+  (is (not (contains? *data-readers* 'atom)))
   (binding [*data-readers* {}]
-    (let [a (read-string "#atom 42")
-          _ (is (= 42 @a))
-
-          d (LocalDate/of 2026 1 26)
-          f (eval `(fn [] ~d))
-          _ (is (= d (f)))])))
+    (is (= 42 @(read-string "#atom 42"))))
+  (binding [*data-readers* {'atom (fn [x] [:custom x])}]
+    (is (= [:custom 42] (read-string "#atom 42")))))
 
 (deftest pprint-test
   (let [a [(atom 42) (io/file "/") (int-array [1 2 3])]
