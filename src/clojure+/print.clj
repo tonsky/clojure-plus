@@ -263,9 +263,7 @@
 (defn print-dup-delay [^Delay ref ^Writer w]
   (when-not (realized? ref)
     (throw (ex-info "Can’t print-dup <pending...> delay" {})))
-  (.write w "#=(clojure.lang.Delay. ")
-  (print-dup-call 'clojure.core/constantly @ref w)
-  (.write w ")"))
+  (print-dup-call 'clojure+.print/read-delay @ref w))
 
 (defn- read-delay [val]
   (if (= '<pending...> val)
@@ -285,9 +283,7 @@
 (defn print-dup-future [^Future ref ^Writer w]
   (when-not (.isDone ref)
     (throw (ex-info "Can’t print-dup <pending...> future" {})))
-  (.write w "#=(clojure.core/future-call ")
-  (print-dup-call 'clojure.core/constantly (.get ref) w)
-  (.write w ")"))
+  (print-dup-call 'clojure+.print/read-future (.get ref) w))
 
 (defn- read-future [val]
   (if (= '<pending...> val)

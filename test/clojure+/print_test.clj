@@ -665,8 +665,6 @@
       TimeUnit/SECONDS                      "#=(java.util.concurrent.TimeUnit/valueOf \"SECONDS\")")))
 
 (defn- repr [x]
-  (when (or (instance? Delay x) (instance? Future x))
-    (deref x))
   [(class x) (pr-str x)])
 
 (deftest print-dup-stateful-test
@@ -676,6 +674,7 @@
                  (and
                    (= s s')
                    (= (repr x) (repr (read-string s')))
+                   (= s (binding [*print-dup* true] (pr-str (read-string s'))))
                    (= (repr x) (repr (f)))))
       (byte-array [1 2 -1])                 "#=(clojure.core/byte-array [1 2 -1])"
       (boolean-array [true false])          "#=(clojure.core/boolean-array [true false])"
@@ -695,8 +694,8 @@
       (reduced 1)                           "#=(clojure.core/reduced 1)"
       (deliver (promise) 1)                 "#=(clojure.core/deliver #=(clojure.core/promise) 1)"
       (promise)                             "#=(clojure.core/promise)"
-      (doto (delay 1) deref)                "#=(clojure.lang.Delay. #=(clojure.core/constantly 1))"
-      (doto (future 1) deref)               "#=(clojure.core/future-call #=(clojure.core/constantly 1))"
+      (doto (delay 1) deref)                "#=(clojure+.print/read-delay 1)"
+      (doto (future 1) deref)               "#=(clojure+.print/read-future 1)"
       (transient [1 2])                     "#=(clojure.core/transient [1 2])"
       (transient {1 2})                     "#=(clojure.core/transient {1 2})"
       (transient #{1})                      "#=(clojure.core/transient #{1})"
