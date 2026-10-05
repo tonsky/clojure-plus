@@ -484,6 +484,12 @@
     exclude (remove #((set exclude) (:tag %)))
     include (filter #((set include) (:tag %)))))
 
+(def ^:private system-print-dup
+  "Classes that already have print-dup in clojure.core. Compiler uses print-dup
+   to embed constants into bytecode, and built-in representation can always be
+   read back, even if our readers are not installed."
+  #{Namespace AFunction})
+
 (defn install-printers!
   "Install printers for most of Clojure built-in data structures.
    
@@ -502,7 +508,8 @@
    (let [catalogue (catalogue opts)]
      (doseq [{:keys [class print]} catalogue]
        (.addMethod ^MultiFn print-method class print)
-       (.addMethod ^MultiFn print-dup class print)
+       (when-not (system-print-dup class)
+         (.addMethod ^MultiFn print-dup class print))
        (.addMethod ^MultiFn pprint/simple-dispatch class #(print % *out*))))))
 
 (defn data-readers

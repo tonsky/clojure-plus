@@ -4,6 +4,10 @@
 
 - `clojure.repl/pst` uses `clojure+.error` format after `install!` #28
 
+`clojure+.print`:
+
+- Keep system `print-dup` for namespaces and functions #30
+
 # 1.7.2 - Java 26, 2026
 
 - Install print and hashp to all frames in dynamic var bindings #16

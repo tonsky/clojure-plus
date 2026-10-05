@@ -252,7 +252,12 @@
 
         _  (is (= "#fn clojure.core/+" (pr-str +)))
         f3 (read-string "#fn clojure.core/+")
-        _  (is (= 3 (f3 1 2)))]))
+        _  (is (= 3 (f3 1 2)))
+
+        _  (is (= "#=(clojure.core$_PLUS_. )" (binding [*print-dup* true] (pr-str +))))
+        f4 (binding [*data-readers* {}]
+             (eval `(fn [] ~+)))
+        _  (is (= 3 ((f4) 1 2)))]))
 
 (deftest multifn-test
   (is (= "#multifn print-method" (pr-str print-method))))
@@ -262,7 +267,12 @@
         _   (is (= "#ns clojure+.print-test" (pr-str ns)))
         ns' (read-string "#ns clojure+.print-test")
         _   (is (instance? Namespace ns'))
-        _   (is (= ns ns'))]))
+        _   (is (= ns ns'))
+
+        _   (is (= "#=(find-ns clojure+.print-test)" (binding [*print-dup* true] (pr-str ns))))
+        f   (binding [*data-readers* {}]
+              (eval `(fn [] ~ns)))
+        _   (is (= ns (f)))]))
 
 (deftest transient-vector-test
   (let [v  (transient [])
