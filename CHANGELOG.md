@@ -1,4 +1,4 @@
-# WIP
+# 1.8.0 - Oct 12, 2026
 
 `clojure+.error`:
 
@@ -13,7 +13,7 @@
 - Actually install readers to all frames in dynamic var bindings #16 #30
 - Keep transient maps and sets editable if printing throws
 
-# 1.7.2 - Java 26, 2026
+# 1.7.2 - Jan 26, 2026
 
 - Install print and hashp to all frames in dynamic var bindings #16
 - Fixed clojure+.test/run on ns with 0 tests #17
