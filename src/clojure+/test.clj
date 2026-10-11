@@ -184,9 +184,17 @@
   (reset! *ns-failed? true))
 
 (defn- trace-transform [trace]
-  (take-while
-    (fn [{:keys [ns method file]}]
-      (not= ["clojure.test" "test-var/fn" "test.clj"] [ns method file]))
+  (if (:collapse-tests? error/config)
+    (let [[head tail] (split-with
+                       (fn [{:keys [element]}]
+                         (not (and element
+                                (re-matches #"(clojure\.test|clojure_PLUS_\.test)\$test_var\$fn__\d+(\$fn__\d+)*"
+                                  (.getClassName ^StackTraceElement element))
+                                (= "test.clj" (.getFileName ^StackTraceElement element)))))
+                       trace)]
+      (if (seq tail)
+        (concat head [['...test-frames (reduce + (map #(if (vector? %) (second %) 1) tail))]])
+        trace))
     trace))
 
 (defn- report-error [m]

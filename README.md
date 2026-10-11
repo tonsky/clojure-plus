@@ -395,35 +395,60 @@ This namespace was inspired by Ivan Grishaev’s [taggie](https://github.com/igr
 
 ## clojure+.error
 
-Clojure exception printer is hard to look at:
+Clojure exception printer is hard to look at. Consider an invalid DataScript transaction:
 
 ```clojure
-user=> (println (Exception. "Oops"))
+user=> (require '[datascript.core :as d]
+                '[clojure+.error :as error])
+user=> (try
+         (d/db-with (d/empty-db) [[:db/add 1 :name nil]])
+         (catch Exception e
+           (def failure e)))
+```
+
+Here is the exception with the standard Clojure printer:
+
+```clojure
+user=> (prn failure)
 #error {
- :cause Oops
+ :cause "Cannot store nil as a value at [:db/add 1 :name nil]"
+ :data {:value nil, :context [:db/add 1 :name nil], :error :transact/syntax}
  :via
- [{:type java.lang.Exception
-   :message Oops
-   :at [user$eval3 invokeStatic NO_SOURCE_FILE 1]}]
+ [{:type clojure.lang.ExceptionInfo
+   :message "Cannot store nil as a value at [:db/add 1 :name nil]"
+   :data {:value nil, :context [:db/add 1 :name nil], :error :transact/syntax}
+   :at [datascript.db$transact_add invokeStatic "db.cljc" 1596]}]
  :trace
- [[user$eval3 invokeStatic NO_SOURCE_FILE 1]
-  [user$eval3 invoke NO_SOURCE_FILE 1]
-  [clojure.lang.Compiler eval Compiler.java 7700]
-  [clojure.lang.Compiler eval Compiler.java 7655]
-  [clojure.core$eval invokeStatic core.clj 3232]
-  [clojure.core$eval invoke core.clj 3228]
-  [clojure.main$repl$read_eval_print__9244$fn__9247 invoke main.clj 437]
-  [clojure.main$repl$read_eval_print__9244 invoke main.clj 437]
-  [clojure.main$repl$fn__9253 invoke main.clj 459]
-  [clojure.main$repl invokeStatic main.clj 459]
-  [clojure.main$repl_opt invokeStatic main.clj 523]
-  [clojure.main$main invokeStatic main.clj 668]
-  [clojure.main$main doInvoke main.clj 617]
-  [clojure.lang.RestFn invoke RestFn.java 400]
-  [clojure.lang.AFn applyToHelper AFn.java 152]
-  [clojure.lang.RestFn applyTo RestFn.java 135]
-  [clojure.lang.Var applyTo Var.java 707]
-  [clojure.main main main.java 40]]}
+ [[datascript.db$transact_add invokeStatic "db.cljc" 1596]
+  [datascript.db$transact_add invoke "db.cljc" 1594]
+  [datascript.db$transact_tx_data_impl invokeStatic "db.cljc" 1882]
+  [datascript.db$transact_tx_data_impl invoke "db.cljc" 1687]
+  [datascript.db$transact_tx_data invokeStatic "db.cljc" 1932]
+  [datascript.db$transact_tx_data invoke "db.cljc" 1925]
+  [datascript.conn$with invokeStatic "conn.cljc" 29]
+  [datascript.conn$with invoke "conn.cljc" 23]
+  [datascript.conn$with invokeStatic "conn.cljc" 24]
+  [datascript.conn$with invoke "conn.cljc" 23]
+  [datascript.conn$db_with invokeStatic "conn.cljc" 35]
+  [datascript.conn$db_with invoke "conn.cljc" 31]
+  [user$eval4939 invokeStatic "NO_SOURCE_FILE" 1]
+  [user$eval4939 invoke "NO_SOURCE_FILE" 1]
+  [clojure.lang.Compiler eval "Compiler.java" 7177]
+  [clojure.lang.Compiler eval "Compiler.java" 7132]
+  [clojure.core$eval invokeStatic "core.clj" 3214]
+  [clojure.core$eval invoke "core.clj" 3210]
+  [clojure.main$repl$read_eval_print__9086$fn__9089 invoke "main.clj" 437]
+  [clojure.main$repl$read_eval_print__9086 invoke "main.clj" 437]
+  [clojure.main$repl$fn__9095 invoke "main.clj" 458]
+  [clojure.main$repl invokeStatic "main.clj" 458]
+  [clojure.main$repl_opt invokeStatic "main.clj" 522]
+  [clojure.main$main invokeStatic "main.clj" 667]
+  [clojure.main$main doInvoke "main.clj" 616]
+  [clojure.lang.RestFn invoke "RestFn.java" 397]
+  [clojure.lang.AFn applyToHelper "AFn.java" 152]
+  [clojure.lang.RestFn applyTo "RestFn.java" 132]
+  [clojure.lang.Var applyTo "Var.java" 705]
+  [clojure.main main "main.java" 40]]}
 ```
 
 And I mean it in a literal sense: information is hard to parse, it’s not easy to find what you are looking for, labels don’t make sense. Why is message repeated twice? Why is it called `:cause` first time and `:message` second time? What are `:via` and `:at`? Why is it nested like this?
@@ -431,78 +456,86 @@ And I mean it in a literal sense: information is hard to parse, it’s not easy 
 Compare to Java:
 
 ```clojure
-user=> (.printStackTrace (Exception. "Oops"))
-java.lang.Exception: Oops
-        at user$eval5.invokeStatic(NO_SOURCE_FILE:1)
-        at user$eval5.invoke(NO_SOURCE_FILE:1)
-        at clojure.lang.Compiler.eval(Compiler.java:7700)
-        at clojure.lang.Compiler.eval(Compiler.java:7655)
-        at clojure.core$eval.invokeStatic(core.clj:3232)
-        at clojure.core$eval.invoke(core.clj:3228)
-        at clojure.main$repl$read_eval_print__9244$fn__9247.invoke(main.clj:437)
-        at clojure.main$repl$read_eval_print__9244.invoke(main.clj:437)
-        at clojure.main$repl$fn__9253.invoke(main.clj:459)
-        at clojure.main$repl.invokeStatic(main.clj:459)
-        at clojure.main$repl_opt.invokeStatic(main.clj:523)
-        at clojure.main$main.invokeStatic(main.clj:668)
-        at clojure.main$main.doInvoke(main.clj:617)
-        at clojure.lang.RestFn.invoke(RestFn.java:400)
-        at clojure.lang.AFn.applyToHelper(AFn.java:152)
-        at clojure.lang.RestFn.applyTo(RestFn.java:135)
-        at clojure.lang.Var.applyTo(Var.java:707)
-        at clojure.main.main(main.java:40)
+user=> (.printStackTrace failure)
+clojure.lang.ExceptionInfo: Cannot store nil as a value at [:db/add 1 :name nil] {:value nil, :context [:db/add 1 :name nil], :error :transact/syntax}
+	at datascript.db$transact_add.invokeStatic(db.cljc:1596)
+	at datascript.db$transact_add.invoke(db.cljc:1594)
+	at datascript.db$transact_tx_data_impl.invokeStatic(db.cljc:1882)
+	at datascript.db$transact_tx_data_impl.invoke(db.cljc:1687)
+	at datascript.db$transact_tx_data.invokeStatic(db.cljc:1932)
+	at datascript.db$transact_tx_data.invoke(db.cljc:1925)
+	at datascript.conn$with.invokeStatic(conn.cljc:29)
+	at datascript.conn$with.invoke(conn.cljc:23)
+	at datascript.conn$with.invokeStatic(conn.cljc:24)
+	at datascript.conn$with.invoke(conn.cljc:23)
+	at datascript.conn$db_with.invokeStatic(conn.cljc:35)
+	at datascript.conn$db_with.invoke(conn.cljc:31)
+	at user$eval4939.invokeStatic(NO_SOURCE_FILE:1)
+	at user$eval4939.invoke(NO_SOURCE_FILE:1)
+	at clojure.lang.Compiler.eval(Compiler.java:7177)
+	at clojure.lang.Compiler.eval(Compiler.java:7132)
+	at clojure.core$eval.invokeStatic(core.clj:3214)
+	at clojure.core$eval.invoke(core.clj:3210)
+	at clojure.main$repl$read_eval_print__9086$fn__9089.invoke(main.clj:437)
+	at clojure.main$repl$read_eval_print__9086.invoke(main.clj:437)
+	at clojure.main$repl$fn__9095.invoke(main.clj:458)
+	at clojure.main$repl.invokeStatic(main.clj:458)
+	at clojure.main$repl_opt.invokeStatic(main.clj:522)
+	at clojure.main$main.invokeStatic(main.clj:667)
+	at clojure.main$main.doInvoke(main.clj:616)
+	at clojure.lang.RestFn.invoke(RestFn.java:397)
+	at clojure.lang.AFn.applyToHelper(AFn.java:152)
+	at clojure.lang.RestFn.applyTo(RestFn.java:132)
+	at clojure.lang.Var.applyTo(Var.java:705)
+	at clojure.main.main(main.java:40)
 ```
 
 Much cleaner! I often call `.printStackTrace` on exceptions just to understand what’s going on.
 
-My second problem is that Clojure exception printer doesn’t know about Clojure. Why do I see `clojure.main$repl_opt invokeStatic` when what I wrote in code is `(clojure.main/repl-opt)`?
+My second problem is that Clojure exception printer doesn’t know about Clojure. Why do I see `datascript.db$transact_tx_data_impl invokeStatic` when what I wrote in code is `(datascript.db/transact-tx-data-impl)`?
 
 Clojure+ solves all these problems! Here’s how _the same_ exception looks in Clojure+:
 
 ```clojure
-user=> (println (Exception. "Oops"))
-Exception: Oops
+user=> (error/install!)
+user=> (println failure)
+ExceptionInfo: Cannot store nil as a value at [:db/add 1 :name nil] {:value nil, :context [:db/add 1 :name nil], :error :transact/syntax}
+  datascript.db/transact-add           db.cljc 1596
+  datascript.db/transact-tx-data-impl  db.cljc 1882
+  datascript.db/transact-tx-data       db.cljc 1932
+  datascript.conn/with                 conn.cljc 29
+  datascript.conn/with                 conn.cljc 24
+  datascript.conn/db-with              conn.cljc 35
   user/eval
-  Compiler.eval                         Compiler.java 7700
-  Compiler.eval                         Compiler.java 7655
-  clojure.core/eval                     core.clj 3232
-  clojure.main/repl/read-eval-print/fn  main.clj 437
-  clojure.main/repl/read-eval-print     main.clj 437
-  clojure.main/repl/fn                  main.clj 459
-  clojure.main/repl                     main.clj 459
-  clojure.main/repl-opt                 main.clj 523
-  clojure.main/main                     main.clj 668
-  Var.applyTo                           Var.java 707
-  main.main                             main.java 40
+  ... 11 REPL frames omitted
 ```
 
-I just want to highlight: this is exactly the same stacktrace, but cleaned up and formatted better. It is Clojure-aware: stack trace elements that are clearly coming from Clojure are decoded back to familiar form.
+First of all, yes. We omit REPL frames. Because—let’s be honest—nobody needs to look at them more than once in their life.
+
+Second: all application frames are preserved and displayed in a Clojure-aware way: stack trace elements that are clearly coming from Clojure are decoded back to familiar form. `ExceptionInfo` data is included alongside the message.
 
 There’re couple more tricks. For those of us with colored terminal, we can help you read output even better:
 
-<img src="./extras/error.webp" width=500 height=325>
+<img src="./extras/error.webp" width=838 height=256>
 
 We can print readably:
 
 ```clojure
-user=> (prn (Exception. "Oops"))
+user=> (prn failure)
 
 #error {
- :class   java.lang.Exception
- :message "Oops"
+ :class   clojure.lang.ExceptionInfo
+ :message "Cannot store nil as a value at [:db/add 1 :name nil]"
+ :data    {:value nil, :context [:db/add 1 :name nil], :error :transact/syntax}
  :trace
- [[user/eval]
-  [Compiler.eval                         "Compiler.java" 7700]
-  [Compiler.eval                         "Compiler.java" 7655]
-  [clojure.core/eval                     "core.clj" 3232]
-  [clojure.main/repl/read-eval-print/fn  "main.clj" 437]
-  [clojure.main/repl/read-eval-print     "main.clj" 437]
-  [clojure.main/repl/fn                  "main.clj" 459]
-  [clojure.main/repl                     "main.clj" 459]
-  [clojure.main/repl-opt                 "main.clj" 523]
-  [clojure.main/main                     "main.clj" 668]
-  [Var.applyTo                           "Var.java" 707]
-  [main.main                             "main.java" 40]]}
+ [[datascript.db/transact-add           "db.cljc" 1596]
+  [datascript.db/transact-tx-data-impl  "db.cljc" 1882]
+  [datascript.db/transact-tx-data       "db.cljc" 1932]
+  [datascript.conn/with                 "conn.cljc" 29]
+  [datascript.conn/with                 "conn.cljc" 24]
+  [datascript.conn/db-with              "conn.cljc" 35]
+  [user/eval]
+  [...REPL-frames 11]]}
 ```
 
 The trick here is that you can be both _readable_ (in Clojure `(read)` sense) and still nicely formatted.
@@ -510,45 +543,21 @@ The trick here is that you can be both _readable_ (in Clojure `(read)` sense) an
 Finally, for long exceptions, I always found it irritating that you need to scroll up to see message and where that error started. Well, no more: `clojure+.error` can reverse stack traces:
 
 ```clojure
-user=> (clojure+.error/install! {:reverse? true})
-user=> (println (Exception. "Oops"))
+user=> (error/install! {:reverse? true})
+user=> (println failure)
 
-  main.main                             main.java 40
-  Var.applyTo                           Var.java 707
-  clojure.main/main                     main.clj 668
-  clojure.main/repl-opt                 main.clj 523
-  clojure.main/repl                     main.clj 459
-  clojure.main/repl/fn                  main.clj 459
-  clojure.main/repl/read-eval-print     main.clj 437
-  clojure.main/repl/read-eval-print/fn  main.clj 437
-  clojure.core/eval                     core.clj 3232
-  Compiler.eval                         Compiler.java 7655
-  Compiler.eval                         Compiler.java 7700
+  ... 11 REPL frames omitted
   user/eval
-Exception: Oops
+  datascript.conn/db-with              conn.cljc 35
+  datascript.conn/with                 conn.cljc 24
+  datascript.conn/with                 conn.cljc 29
+  datascript.db/transact-tx-data       db.cljc 1932
+  datascript.db/transact-tx-data-impl  db.cljc 1882
+  datascript.db/transact-add           db.cljc 1596
+ExceptionInfo: Cannot store nil as a value at [:db/add 1 :name nil] {:value nil, :context [:db/add 1 :name nil], :error :transact/syntax}
 ```
 
 This way you always see what happened without need to scroll.
-
-Oh, and we support `ExceptionInfo`, that goes without saying:
-
-```clojure
-user=> (println (ex-info "Oops" {:a 1, :b 2}))
-
-  main.main                             main.java 40
-  Var.applyTo                           Var.java 707
-  clojure.main/main                     main.clj 668
-  clojure.main/repl-opt                 main.clj 523
-  clojure.main/repl                     main.clj 459
-  clojure.main/repl/fn                  main.clj 459
-  clojure.main/repl/read-eval-print     main.clj 437
-  clojure.main/repl/read-eval-print/fn  main.clj 437
-  clojure.core/eval                     core.clj 3232
-  Compiler.eval                         Compiler.java 7655
-  Compiler.eval                         Compiler.java 7700
-  user/eval
-ExceptionInfo: Oops {:a 1, :b 2}
-```
 
 Good news? All this is configurable! Here are the defaults:
 
@@ -556,6 +565,8 @@ Good news? All this is configurable! Here are the defaults:
 (clojure+.error/install!
   {:clean?           true
    :collapse-common? true
+   :collapse-repl?   true
+   :collapse-tests?  true
    :trace-transform  nil
    :color?           true
    :reverse?         false
@@ -680,6 +691,7 @@ ERROR in instant.db.instaql-test/some-test (Numbers.java:123)
   clojure.core/apply             core.clj 667
   instant.db.instaql-test/fn/fn  instaql_test.clj 2509
   instant.db.instaql-test/fn     instaql_test.clj 2509
+  ... 20 test frames omitted
 ```
 
 Also, in case of uncaught exceptions, we report place _in test_ where it happened:

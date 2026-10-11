@@ -2,6 +2,8 @@
 
 `clojure+.error`:
 
+- Omit REPL stack frames #29
+- Print "...N frames omitted" for REPL and test filtered frames
 - `clojure.repl/pst` uses `clojure+.error` format after `install!` #28
 
 `clojure+.print`:

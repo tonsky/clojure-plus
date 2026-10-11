@@ -13,12 +13,16 @@
   {:clean?           true
    :trace-transform  nil
    :collapse-common? true
+   :collapse-repl?   true
+   :collapse-tests?  true
    :color?           (util/color?)
    :reverse?         false
    :root-cause-only? false
    :indent           2})
 
 (def ^:dynamic *trace-transform*
+  "A fn accepting and returning frame maps and omission vectors, such as
+   ['...test-frames 4]. Applied after the configured :trace-transform."
   nil)
 
 (def ^:private ^:dynamic *depth*
@@ -76,11 +80,44 @@
      :separator separator
      :method    method}))
 
+(defn- compiler-eval? [{:keys [element]}]
+  (when element
+    (let [^StackTraceElement el element]
+      (and
+        (= "clojure.lang.Compiler" (.getClassName el))
+        (= "eval" (.getMethodName el))))))
+
+(defn- core-eval? [{:keys [element]}]
+  (when element
+    (= "clojure.core$eval" (.getClassName ^StackTraceElement element))))
+
+(defn- repl-frame? [{:keys [element]}]
+  (when element
+    (str/includes? (.getClassName ^StackTraceElement element) "repl")))
+
+(defn- collapse-repl [trace]
+  (loop [head []
+         tail (seq trace)]
+    (cond
+      (empty? tail)
+      trace
+
+      (compiler-eval? (first tail))
+      (let [[compiler remaining] (split-with compiler-eval? tail)
+            after-eval (drop-while core-eval? remaining)]
+        (if (repl-frame? (first after-eval))
+          (conj head ['...REPL-frames (count tail)])
+          (recur (into head compiler) remaining)))
+
+      :else
+      (recur (conj head (first tail)) (next tail)))))
+
 (defn- get-trace [^Throwable t]
   (cond->> (.getStackTrace t)
     (:clean? config)          (remove noise?)
     (:clean? config)          (clear-duplicates)
     true                      (mapv trace-element)
+    (:collapse-repl? config)  (collapse-repl)
     (:trace-transform config) ((:trace-transform config))
     *trace-transform*         (*trace-transform*)))
 
@@ -91,7 +128,10 @@
                    (let [prev-trace (get-trace prev-t)]
                      (loop [m (dec (count trace))
                             n (dec (count prev-trace))]
-                       (if (and (>= m 0) (>= n 0) (= (nth trace m) (nth prev-trace n)))
+                       (if (and (>= m 0) (>= n 0)
+                                ;; Matching omission counts do not imply matching frames.
+                                (map? (nth trace m))
+                                (= (nth trace m) (nth prev-trace n)))
                          (recur (dec m) (dec n))
                          (- (dec (count trace)) m))))))
         common (or common 0)
@@ -143,8 +183,42 @@
 (defn- longest-method [indent ts]
   (reduce max 0
   (for [[t depth] (map vector ts (range))
-        el        (:trace t)]
+        el        (:trace t)
+        :when     (map? el)]
     (+ (* depth indent) (count (:ns el)) (count (:separator el)) (count (:method el))))))
+
+(defn- print-readably-frame [^Writer w el max-len depth]
+  (if (vector? el)
+    (write w "[" (first el) " " (second el) "]")
+    (let [{:keys [ns separator method file line]} el
+          right-pad (pad \space (- max-len depth (count ns) (count separator) (count method)))]
+      (write w "[" ns separator method)
+      (cond
+        (= -2 line)
+        (write w right-pad "  :native-method")
+
+        file
+        (do
+          (write w right-pad "  ")
+          (print-method file w)
+          (write w " " line)))
+      (write w "]"))))
+
+(defn- print-humanly-frame [^Writer w el max-len]
+  (if (vector? el)
+    (let [[marker n] el
+          label (-> (name marker) (subs 3) (str/replace "-" " "))]
+      (write w (ansi-grey) "... " n " " label
+        (when (not= marker '...common-frames) " omitted") (ansi-reset)))
+    (let [{:keys [ns separator method file line]} el
+          right-pad (pad \space (- max-len (count ns) (count separator) (count method)))]
+      (write w (ansi-grey) ns separator (ansi-reset) method)
+      (cond
+        (= -2 line)
+        (write w right-pad "  " (ansi-grey) "Native Method" (ansi-reset))
+
+        file
+        (write w right-pad "  " file " " (ansi-grey) line (ansi-reset))))))
 
 (defn- print-readably-impl [^Writer w ts max-len depth]
   (let [t      (first ts)
@@ -172,28 +246,16 @@
     (loop [trace  trace
            first? true]
       (when-not (empty? trace)
-        (let [el (first trace)
-              {:keys [ns separator method file line]} el
-              right-pad (pad \space (- max-len depth (count ns) (count separator) (count method)))]
+        (let [el (first trace)]
           (when-not first?
             (write w "\n" indent "  "))
-          (write w "[" ns separator method)
-          (cond
-            (= -2 line)
-            (write w right-pad "  :native-method")
-            
-            file
-            (do
-              (write w right-pad "  ")
-              (print-method file w)
-              (write w " " line)))
-          (write w "]")
+          (print-readably-frame w el max-len depth)
           (recur (next trace) false))))
     (when (pos? common)
       (let [first? (empty? trace)]
         (when-not first?
           (write w "\n" indent "  "))
-        (write w "[...common-elements " common "]")))
+        (print-readably-frame w ['...common-frames common] max-len depth)))
     (write w "]")
     
     ;; cause
@@ -224,26 +286,14 @@
     (write w "\n" indent " :trace")
     (write w "\n" indent " [")
     (when (pos? common)
-      (write w "[...common-elements " common "]"))
+      (print-readably-frame w ['...common-frames common] max-len depth))
     (loop [trace  (reverse trace)
            first? (not (pos? common))]
       (when-not (empty? trace)
-        (let [el (first trace)
-              {:keys [ns separator method file line]} el
-              right-pad (pad \space (- max-len depth (count ns) (count separator) (count method)))]
+        (let [el (first trace)]
           (when-not first?
             (write w "\n" indent "  "))
-          (write w "[" ns separator method)
-          (cond
-            (= -2 line)
-            (write w right-pad "  :native-method")
-            
-            file
-            (do
-              (write w right-pad "  ")
-              (print-method file w)
-              (write w " " line)))
-          (write w "]")
+          (print-readably-frame w el max-len depth)
           (recur (next trace) false))))
     (write w "]")
 
@@ -295,25 +345,14 @@
         (write w (ansi-reset)))
       
       ;; trace
-      (doseq [el   (drop-last common trace)
-              :let [{:keys [ns separator method file line]} el
-                    right-pad (pad \space (- max-len (count ns) (count separator) (count method)))]]
+      (doseq [el (drop-last common trace)]
         (write w "\n" indent)
-       
-        ;; method
-        (write w (ansi-grey) ns separator (ansi-reset) method)
-
-        ;; locaiton
-        (cond 
-          (= -2 line)
-          (write w right-pad "  " (ansi-grey) "Native Method" (ansi-reset))
-  
-          file
-          (write w right-pad "  " file " " (ansi-grey) line (ansi-reset))))
+        (print-humanly-frame w el max-len))
       
-      ;; ... common elements
+      ;; ... common frames
       (when (pos? common)
-        (write w "\n" indent (ansi-grey) "... " common " common elements" (ansi-reset))))))
+        (write w "\n" indent)
+        (print-humanly-frame w ['...common-frames common] max-len)))))
 
 (defn print-humanly-reverse [^Writer w ^Throwable t]
   (let [ts      (linearize :cause (datafy-throwable t))
@@ -326,26 +365,15 @@
                   (pad \space (:indent config)))]
     (doseq [[idx t] (map vector (range) (reverse ts))
             :let [{:keys [class message data trace common]} t]]
-      ;; ... common elements
+      ;; ... common frames
       (when (pos? common)
-        (write w "\n" indent (ansi-grey) "... " common " common elements" (ansi-reset)))
+        (write w "\n" indent)
+        (print-humanly-frame w ['...common-frames common] max-len))
       
       ;; trace
-      (doseq [el   (->> trace (drop-last common) reverse)
-              :let [{:keys [ns separator method file line]} el
-                    right-pad (pad \space (- max-len (count ns) (count separator) (count method)))]]
+      (doseq [el (->> trace (drop-last common) reverse)]
         (write w "\n" indent)
-       
-        ;; method
-        (write w (ansi-grey) ns separator (ansi-reset) method)
-        
-        ;; locaiton
-        (cond 
-          (= -2 line)
-          (write w right-pad "  " (ansi-grey) "Native Method" (ansi-reset))
-  
-          file
-          (write w right-pad "  " file " " (ansi-grey) line (ansi-reset))))
+        (print-humanly-frame w el max-len))
       
       ;; class
       (write w "\n" (when (< idx (dec (count ts))) "Caused by: ") (ansi-red) (.getSimpleName ^Class class))
@@ -409,9 +437,17 @@
                                  to be more clojure-like. True by default.
      :collapse-common? <bool> :: With chained exceptions, skips common part of
                                  stack traces. True by default.
+     :collapse-repl?   <bool> :: Collapses Compiler.eval, optional clojure.core/eval,
+                                 and a following class containing \"repl\", plus
+                                 the remaining tail. True by default.
+     :collapse-tests?  <bool> :: Whether clojure+.test elides test runner frames.
+                                 True by default.
      :trace-transform  <fn>   :: A fn accepting and returning trace--a sequence
-                                 of maps {:keys [element file line ns method]}
+                                 of maps {:keys [element file line ns separator method]}
                                  where element is original StackTraceElement.
+                                 Input can also contain omission vectors.
+                                 Can insert omission vectors, e.g. ['...test-frames 4]
+                                 or ['...common-frames 4], in place of removed frames.
      :color?           <bool> :: Whether to use color output. Autodetect by default.
      :reverse?         <bool> :: Whether to print stack trace and cause chain
                                  inner-to-outer (Java default) or outer-to-inner.
